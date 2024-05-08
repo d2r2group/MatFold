@@ -198,14 +198,6 @@ class MatFold:
         if split_type not in ["index", "structure_id", "composition", "chemsys", "sgnum", "crystalsys", "elements"]:
             raise ValueError('Error: `split_type` must be either "index", "structure_id", '
                              '"composition", "chemsys", "sgnum", "crystalsys", or "elements"')
-        if split_type == "elements":
-            self.create_splits_by_elements(n_outer_splits=n_outer_splits,
-                                           n_inner_splits=n_inner_splits,
-                                           keep_binaries_in_train=keep_binaries_in_train,
-                                           write_base_str=write_base_str,
-                                           output_dir=output_dir,
-                                           verbose=verbose)
-            return
         if split_type == "index":
             split_type = 0
 
@@ -214,10 +206,16 @@ class MatFold:
         if keep_binaries_in_train:
             # default_train_indices = list(out_df[out_df['n_elements'] == 2].index)
             default_train_indices = list(out_df[out_df['isbinary']].index)
-            test_possibilities = list(set(out_df[~out_df['isbinary']][split_type]))
+            if split_type == "elements":
+                test_possibilities = list(set(itertools.chain.from_iterable(out_df[~out_df['isbinary']]['elements'])))
+            else:
+                test_possibilities = list(set(out_df[~out_df['isbinary']][split_type]))
         else:
             default_train_indices = []
-            test_possibilities = list(set(out_df[split_type]))
+            if split_type == "elements":
+                test_possibilities = list(set(itertools.chain.from_iterable(out_df['elements'])))
+            else:
+                test_possibilities = list(set(out_df[split_type]))
 
         # Remove splits from test set that have larger fractions than `max_fraction_testset`
         # then add their indices to `default_train_indices`
@@ -248,46 +246,72 @@ class MatFold:
         else:
             raise ValueError("Error: `n_outer_splits` needs to be greater than 1.")
 
-        # ternary+ "col_to_split" splits for outer loop
+        # Splits for outer loop
         for i, (train_outer_set_index, test_outer_set_index) in enumerate(kf_outer.split(test_possibilities)):
-            if verbose:
-                print(f'Splitting outer {str(i)}')
             # train structure ids
             outer_train_set = set(np.take(test_possibilities, train_outer_set_index))
 
             # test structure ids
             outer_test_set = set(np.take(test_possibilities, test_outer_set_index))
 
+            outersplit_string = '-'.join(sorted(outer_test_set)) if split_type == "elements" else f"k{str(i)}"
             if verbose:
+                print('Splitting outer: ', outersplit_string)
                 print(outer_train_set)
                 print(outer_test_set)
 
             # ensure no overlap of outer train / test splitting criteria
             assert len(outer_train_set.intersection(outer_test_set)) == 0
 
-            # indices of all examples for outer train fold (less any specified by default_train_indices)
-            outer_train_indices = list(
-                set(out_df[out_df[split_type].isin(outer_train_set)].index) - set(default_train_indices)
-            )
-            # indices of all examples for outer test fold (less any specified by default_train_indices)
-            outer_test_indices = list(
-                set(out_df[out_df[split_type].isin(outer_test_set)].index) - set(default_train_indices)
-            )
+            if split_type != "elements":
+                # indices of all examples for outer train fold (less any specified by default_train_indices)
+                outer_train_indices = list(
+                    set(out_df[out_df[split_type].isin(outer_train_set)].index) - set(default_train_indices)
+                )
+                # indices of all examples for outer test fold (less any specified by default_train_indices)
+                outer_test_indices = list(
+                    set(out_df[out_df[split_type].isin(outer_test_set)].index) - set(default_train_indices)
+                )
+            else:
+                # Indices of all examples whose structures contain only train elements
+                outer_train_indices = list(
+                    set(
+                        out_df[
+                            out_df.apply(
+                                lambda x: len(x['elements'] & outer_train_set) == len(x['elements']),
+                                axis=1
+                            )
+                        ].index
+                    ) - set(default_train_indices)
+                )
+                # indices of all examples whose structures contain a test element
+                outer_test_indices = list(
+                    set(
+                        out_df[
+                            out_df.apply(
+                                lambda x: len(x['elements'] & outer_test_set) > 0,
+                                axis=1
+                            )
+                        ].index
+                    ) - set(default_train_indices)
+                )
 
-            # outer test set
+            if len(outer_train_indices) == 0:
+                # every single structure has the test element(s), so no training is possible
+                continue
+
             outer_test_df = out_df.loc[outer_test_indices, :].copy()
-            # inner test set, with any default training examples added back in
             outer_train_df = out_df.loc[outer_train_indices + default_train_indices, :].copy()
 
             self.check_split(out_df, [outer_train_df, outer_test_df], verbose=verbose)
 
             outer_train_df.loc[:, self.cols_to_keep].to_csv(
-                os.path.join(output_dir, write_base_str + f'.{split_type}.k{str(i)}_outer.train.csv'),
+                os.path.join(output_dir, write_base_str + f'.{split_type}.{outersplit_string}_outer.train.csv'),
                 header=False, index=False
             )
 
             outer_test_df.loc[:, self.cols_to_keep].to_csv(
-                os.path.join(output_dir, write_base_str + f'.{split_type}.k{str(i)}_outer.test.csv'),
+                os.path.join(output_dir, write_base_str + f'.{split_type}.{outersplit_string}_outer.test.csv'),
                 header=False, index=False
             )
 
@@ -307,150 +331,16 @@ class MatFold:
 
                     inner_train_df.loc[:, self.cols_to_keep].to_csv(
                         os.path.join(output_dir,
-                                     write_base_str + f'.{split_type}.k{i}_outer.l{j}_inner.train.csv'),
+                                     write_base_str + f'.{split_type}.{outersplit_string}_outer.l{j}_inner.train.csv'),
                         header=False, index=False
                     )
                     inner_test_df.loc[:, self.cols_to_keep].to_csv(
                         os.path.join(output_dir,
-                                     write_base_str + f'.{split_type}.k{i}_outer.l{j}_inner.test.csv'),
+                                     write_base_str + f'.{split_type}.k{outersplit_string}_outer.l{j}_inner.test.csv'),
                         header=False, index=False
                     )
 
                     self.check_split(out_df, [outer_test_df, inner_train_df, inner_test_df], verbose=verbose)
-
-    def create_splits_by_elements(self,  n_inner_splits: int = 10, n_outer_splits: int = 10,
-                                  keep_binaries_in_train: bool = True, max_fraction_testset: float = 1.0,
-                                  write_base_str: str = 'mf', output_dir: str | os.PathLike | None = None,
-                                  verbose: bool = False) -> None:
-        """
-        Creates splits by elements
-        :param n_inner_splits: Number of inner splits (for nested k-fold)
-        :param n_outer_splits: Number of outer splits (k-fold)
-        :param keep_binaries_in_train: Whether to always keep binaries in training set
-        :param write_base_str: Beginning string of csv file names of the written splits
-        :param output_dir: Directory where the splits are written to
-        :param verbose: Whether to print out details during code execution.
-        :return: None
-        """
-
-        if output_dir is None:
-            output_dir = os.getcwd()
-
-        out_df = self.df_decorated.copy()
-
-        if keep_binaries_in_train:
-            # default_train_indices = list(out_df[out_df['n_elements'] == 2].index)
-            default_train_indices = list(out_df[out_df['isbinary']].index)
-            test_possibilities = list(set(itertools.chain.from_iterable(
-                out_df[~out_df['isbinary']]['elements'])))
-        else:
-            default_train_indices = []
-            test_possibilities = list(set(itertools.chain.from_iterable(out_df['elements'])))
-
-        # Remove splits from test set that have larger fractions than `max_fraction_testset`
-        # then add their indices to `default_train_indices`
-        remove_from_test = [k for k, v in self.split_statistics("elements").items()
-                            if v > max_fraction_testset]
-        add_train_indices = []
-        for r in set(remove_from_test):
-            test_possibilities.remove(r)
-            add_train_indices.extend(list(out_df[out_df["elements"] == r].index))
-        default_train_indices.extend(add_train_indices)
-        default_train_indices = list(set(default_train_indices))
-
-        if len(test_possibilities) < n_outer_splits:
-            raise ValueError(f'Error: `n_outer_splits` is larger than available `test_possibilities` '
-                             f'for splitting strategy elements and `max_fraction_testset` '
-                             f'cutoff of {max_fraction_testset}.')
-        if verbose:
-            print('Possible test examples: ', set(test_possibilities))
-        kf_outer = KFold(n_splits=n_outer_splits, random_state=self.return_seed, shuffle=True)
-        kf_inner = KFold(n_splits=n_inner_splits, random_state=self.return_seed, shuffle=True)
-
-        # ternary+ structure-wise splits for outer loop
-        for el, (train_outer_set_index, test_outer_set_index) in enumerate(kf_outer.split(test_possibilities)):
-            # train structure ids
-            outer_train_set = set(np.take(test_possibilities, train_outer_set_index))
-            # test structure ids
-            outer_test_set = set(np.take(test_possibilities, test_outer_set_index))
-
-            split_els_string = '-'.join(sorted(outer_test_set))
-            if verbose:
-                print('Split els: ', split_els_string)
-
-            # ensure no overlap of outer train / test structures
-            assert len(outer_train_set.intersection(outer_test_set)) == 0
-
-            # May look like a bit overkill, but would be needed if splitting on more than one element for test
-
-            # indices of all examples whose structures contain only train elements
-            outer_train_indices = list(
-                set(
-                    out_df[
-                        out_df.apply(
-                            lambda x: len(x['elements'] & outer_train_set) == len(x['elements']),
-                            axis=1
-                        )
-                    ].index
-                ) - set(default_train_indices)
-            )
-            # indices of all examples whose structures contain a test element
-            outer_test_indices = list(
-                set(
-                    out_df[
-                        out_df.apply(
-                            lambda x: len(x['elements'] & outer_test_set) > 0,
-                            axis=1
-                        )
-                    ].index
-                ) - set(default_train_indices)
-            )
-
-            if len(outer_train_indices) == 0:
-                # every single structure has the test element(s), so no training is possible
-                continue
-
-            outer_test_df = out_df.loc[outer_test_indices, :].copy()
-            outer_train_df = out_df.loc[outer_train_indices + default_train_indices, :].copy()
-
-            self.check_split(out_df, [outer_train_df, outer_test_df], verbose=verbose)
-
-            if write_base_str is not None:
-                outer_train_df.loc[:, self.cols_to_keep].to_csv(
-                    os.path.join(output_dir, write_base_str + f'.elements.{split_els_string}_outer.train.csv'),
-                    header=False, index=False
-                )
-
-            if write_base_str is not None:
-                outer_test_df.loc[:, self.cols_to_keep].to_csv(
-                    os.path.join(output_dir, write_base_str + f'.elements.{split_els_string}_outer.test.csv'),
-                    header=False, index=False
-                )
-
-            for j, (train_inner_index_index, test_inner_index_index) in (
-                    enumerate(kf_inner.split(outer_train_indices))):
-                train_inner_index = np.take(outer_train_indices, train_inner_index_index)
-                test_inner_index = np.take(outer_train_indices, test_inner_index_index)
-
-                final_inner_train_indices = default_train_indices + list(train_inner_index)
-                final_inner_test_indices = test_inner_index.copy()
-
-                inner_train_df = out_df.loc[final_inner_train_indices, :].copy()
-                inner_test_df = out_df.loc[final_inner_test_indices, :].copy()
-
-                self.check_split(out_df, [outer_test_df, inner_train_df, inner_test_df], verbose=verbose)
-
-                if write_base_str is not None:
-                    inner_train_df.loc[:, self.cols_to_keep].to_csv(
-                        os.path.join(output_dir, write_base_str +
-                                     f'.elements.{split_els_string}_outer.l{j}_inner.train.csv'),
-                        header=False, index=False
-                    )
-                    inner_test_df.loc[:, self.cols_to_keep].to_csv(
-                        os.path.join(output_dir, write_base_str +
-                                     f'.elements.{split_els_string}_outer.l{j}_inner.test.csv'),
-                        header=False, index=False
-                    )
 
 
 if __name__ == "__main__":
@@ -464,5 +354,5 @@ if __name__ == "__main__":
     mf = MatFold(pd.read_csv('./test.csv', header=None), cifs)
     stats = mf.split_statistics('crystalsys')
     print(stats)
-    mf.create_splits("crystalsys", n_outer_splits=5, n_inner_splits=1, max_fraction_testset=0.3,
+    mf.create_splits("elements", n_outer_splits=5, n_inner_splits=1, max_fraction_testset=0.3,
                      output_dir='./output/', verbose=True)
