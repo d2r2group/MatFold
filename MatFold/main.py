@@ -27,7 +27,7 @@ class MatFold:
     return_seed: int = 0
 
     def __init__(self, df: pd.DataFrame, bulk_df: dict,
-                 return_frac: float = 1.0, always_return_binary: bool = True,
+                 return_frac: float = 1.0, always_include_n_elements: list | int | None = None,
                  cols_to_keep: list | None = None) -> None:
         """
         MatFold class constructor
@@ -39,12 +39,18 @@ class MatFold:
         dictionary as values.
         :param return_frac: The fraction of the df dataset that is utilized during splitting.
         Must be larger than 0.0 and equal/less than 1.0 (=100%).
-        :param always_return_binary: Whether to always return binaries.
+        :param always_include_n_elements: A list of number of elements for which the corresponding materials are
+        always to be included in the dataset (for cases where `return_frac` < 1.0).
         :param cols_to_keep: List of columns to keep in the splits. If left `None`, then all columns of the
         original df are kept.
         """
         if return_frac <= 0.0 or return_frac > 1.0:
             raise ValueError("Error: `return_frac` needs to be greater than 0.0 and less or equal to 1.0")
+
+        if always_include_n_elements is None:
+            always_include_n_elements = []
+        elif isinstance(always_include_n_elements, int):
+            always_include_n_elements = [always_include_n_elements]
 
         if cols_to_keep is None:
             self.cols_to_keep = list(np.arange(df.shape[1]))
@@ -91,20 +97,27 @@ class MatFold:
         df_split['elements'] = [structures[id_].composition.get_el_amt_dict().keys()
                                 for id_ in df_split['structure_id']]
 
-        df_split['isbinary'] = [True if len(structures[id_].composition.get_el_amt_dict().keys()) == 2 else False
-                                for id_ in df_split['structure_id']]
+        df_split['nelements'] = [len(structures[id_].composition.get_el_amt_dict().keys())
+                                 for id_ in df_split['structure_id']]
 
         for elem in unique_elements:
             df_split[f'contains_{elem}'] = df_split.apply(lambda x: elem in x['elements'], axis=1)
 
         if return_frac < 1.0:
             np.random.seed(self.return_seed)
-            if always_return_binary:
-                unique_binaries = set(df_split[df_split['isbinary']])
-                keep_possibilities = sorted(list(set(df_split[not df_split['isbinary']]['structure_id'])))
-                end_keep_index = int(np.round(return_frac * len(keep_possibilities), 0))
-                np.random.shuffle(keep_possibilities)
-                selection = list(keep_possibilities[:end_keep_index]) + list(unique_binaries)
+            if len(always_include_n_elements) > 0:
+                unique_nelements = set(df_split[df_split['nelements'].isin(always_include_n_elements)]['structure_id'])
+                keep_possibilities = sorted(list(set(df_split[~df_split['nelements'].isin(
+                    always_include_n_elements)]['structure_id'])))
+                n_element_fraction = len(unique_nelements) / (len(keep_possibilities) + len(unique_nelements))
+                if n_element_fraction < return_frac:
+                    end_keep_index = int(np.round((return_frac - n_element_fraction) * len(keep_possibilities), 0))
+                    np.random.shuffle(keep_possibilities)
+                    selection = list(keep_possibilities[:end_keep_index]) + list(unique_nelements)
+                else:
+                    raise ValueError("Error: Fraction of `always_include_n_elements` portion of the dataset is "
+                                     "larger than `return_frac`. Either increase `return_frac` or reduce number "
+                                     "of n elements to be included.")
             else:
                 keep_possibilities = sorted(list(unique_structures))
                 end_keep_index = int(np.round(return_frac * len(keep_possibilities), 0))
@@ -174,7 +187,7 @@ class MatFold:
         return statistics
 
     def create_splits(self, split_type: str, n_inner_splits: int = 10, n_outer_splits: int = 10,
-                      max_fraction_testset: float = 1.0, keep_binaries_in_train: bool = True,
+                      max_fraction_testset: float = 1.0, keep_n_elements_in_train: list | int | None = None,
                       write_base_str: str = 'mf', output_dir: str | os.PathLike | None = None,
                       verbose: bool = False) -> None:
         """
@@ -185,7 +198,8 @@ class MatFold:
         :param n_outer_splits: Number of outer splits (k-fold)
         :param max_fraction_testset: The maximum fraction a key can be represented in the entire dataset to still be
         considered a part of the test set during k-fold process.
-        :param keep_binaries_in_train: Whether to always keep binaries in training set
+        :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
+        in the test set (i.e., not k-folded).
         :param write_base_str: Beginning string of csv file names of the written splits
         :param output_dir: Directory where the splits are written to
         :param verbose: Whether to print out details during code execution.
@@ -203,13 +217,15 @@ class MatFold:
 
         out_df = self.df_decorated.copy()
 
-        if keep_binaries_in_train:
-            # default_train_indices = list(out_df[out_df['n_elements'] == 2].index)
-            default_train_indices = list(out_df[out_df['isbinary']].index)
+        if keep_n_elements_in_train is not None:
+            if isinstance(keep_n_elements_in_train, int):
+                keep_n_elements_in_train = [keep_n_elements_in_train]
+            default_train_indices = list(out_df[out_df['nelements'].isin(keep_n_elements_in_train)].index)
             if split_type == "elements":
-                test_possibilities = list(set(itertools.chain.from_iterable(out_df[~out_df['isbinary']]['elements'])))
+                test_possibilities = list(set(itertools.chain.from_iterable(
+                    out_df[~out_df['nelements'].isin(keep_n_elements_in_train)]['elements'])))
             else:
-                test_possibilities = list(set(out_df[~out_df['isbinary']][split_type]))
+                test_possibilities = list(set(out_df[~out_df['nelements'].isin(keep_n_elements_in_train)][split_type]))
         else:
             default_train_indices = []
             if split_type == "elements":
@@ -351,8 +367,10 @@ if __name__ == "__main__":
     #     json.dump(cifs, fp)
     with open('test.json', 'r') as fp:
         cifs = json.load(fp)
-    mf = MatFold(pd.read_csv('./test.csv', header=None), cifs)
+    mf = MatFold(pd.read_csv('./test.csv', header=None), cifs,
+                 return_frac=0.5, always_include_n_elements=2)
     stats = mf.split_statistics('crystalsys')
     print(stats)
-    mf.create_splits("elements", n_outer_splits=5, n_inner_splits=1, max_fraction_testset=0.3,
+    mf.create_splits("elements", n_outer_splits=5, n_inner_splits=1,
+                     max_fraction_testset=0.3, keep_n_elements_in_train=2,
                      output_dir='./output/', verbose=True)
