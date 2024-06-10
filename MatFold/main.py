@@ -31,11 +31,11 @@ class MatFold:
                  cols_to_keep: list | None = None) -> None:
         """
         MatFold class constructor
-        :param df: Pandas dataframe with the first column containing strings of either form `<structure_id>` or
-        `<structure_id>:<structure_tag>` (where <structure_id> refers to a bulk ID and <structure_tag> refers to
+        :param df: Pandas dataframe with the first column containing strings of either form `<structureid>` or
+        `<structureid>:<structuretag>` (where <structureid> refers to a bulk ID and <structuretag> refers to
         an identifier of a derivative structure). All other columns are optional and may be retained specifying the
         `cols_to_keep` parameter described below.
-        :param bulk_df: Dictionary containing <structure_id> as keys and the corresponding bulk pymatgen
+        :param bulk_df: Dictionary containing <structureid> as keys and the corresponding bulk pymatgen
         dictionary as values.
         :param return_frac: The fraction of the df dataset that is utilized during splitting.
         Must be larger than 0.0 and equal/less than 1.0 (=100%).
@@ -44,6 +44,7 @@ class MatFold:
         :param cols_to_keep: List of columns to keep in the splits. If left `None`, then all columns of the
         original df are kept.
         """
+        self.return_frac = return_frac
         if return_frac <= 0.0 or return_frac > 1.0:
             raise ValueError("Error: `return_frac` needs to be greater than 0.0 and less or equal to 1.0")
 
@@ -53,21 +54,18 @@ class MatFold:
             always_include_n_elements = [always_include_n_elements]
 
         if cols_to_keep is None:
-            self.cols_to_keep = list(np.arange(df.shape[1]))
+            self.cols_to_keep = list(df.columns)
         else:
             self.cols_to_keep = cols_to_keep
 
         df_split = df.copy()
-        if len(df_split[0][0].split(':')) == 2:
-            df_split['structure_id'] = [val.split(':')[0] for val in df_split[0]]
-            df_split['structure_tag'] = [val.split(':')[1] for val in df_split[0]]
-        elif len(df_split[0][0].split(':')) == 1:
-            df_split['structure_id'] = [val.split(':')[0] for val in df_split[0]]
+        if len(df_split.iloc[0, 0].split(':')) <= 2:
+            df_split['structureid'] = [val.split(':')[0] for val in df_split.iloc[:, 0]]
         else:
             raise ValueError("Error: Materials tags should either be of form "
-                             "`<structure_id>` or `<structure_id>:<structure_tag>`.")
+                             "`<structureid>` or `<structureid>:<structuretag>`.")
 
-        unique_structures = set(df_split['structure_id'])
+        unique_structures = set(df_split['structureid'])
         
         for us in unique_structures:
             if us not in bulk_df:
@@ -86,29 +84,26 @@ class MatFold:
              for id_ in unique_structures]
         )
 
-        df_split['composition'] = [structures[id_].composition.reduced_formula for id_ in df_split['structure_id']]
+        df_split['composition'] = [structures[id_].composition.reduced_formula for id_ in df_split['structureid']]
 
-        df_split['chemsys'] = [structures[id_].composition.chemical_system for id_ in df_split['structure_id']]
+        df_split['chemsys'] = [structures[id_].composition.chemical_system for id_ in df_split['structureid']]
 
-        df_split['sgnum'] = [str(space_groups[id_].get_space_group_symbol()) for id_ in df_split['structure_id']]
+        df_split['sgnum'] = [str(space_groups[id_].get_space_group_symbol()) for id_ in df_split['structureid']]
 
-        df_split['crystalsys'] = [str(space_groups[id_].get_crystal_system()) for id_ in df_split['structure_id']]
+        df_split['crystalsys'] = [str(space_groups[id_].get_crystal_system()) for id_ in df_split['structureid']]
 
         df_split['elements'] = [structures[id_].composition.get_el_amt_dict().keys()
-                                for id_ in df_split['structure_id']]
+                                for id_ in df_split['structureid']]
 
         df_split['nelements'] = [len(structures[id_].composition.get_el_amt_dict().keys())
-                                 for id_ in df_split['structure_id']]
-
-        for elem in unique_elements:
-            df_split[f'contains_{elem}'] = df_split.apply(lambda x: elem in x['elements'], axis=1)
+                                 for id_ in df_split['structureid']]
 
         if return_frac < 1.0:
             np.random.seed(self.return_seed)
             if len(always_include_n_elements) > 0:
-                unique_nelements = set(df_split[df_split['nelements'].isin(always_include_n_elements)]['structure_id'])
+                unique_nelements = set(df_split[df_split['nelements'].isin(always_include_n_elements)]['structureid'])
                 keep_possibilities = sorted(list(set(df_split[~df_split['nelements'].isin(
-                    always_include_n_elements)]['structure_id'])))
+                    always_include_n_elements)]['structureid'])))
                 n_element_fraction = len(unique_nelements) / (len(keep_possibilities) + len(unique_nelements))
                 if n_element_fraction < return_frac:
                     end_keep_index = int(np.round((return_frac - n_element_fraction) * len(keep_possibilities), 0))
@@ -124,8 +119,9 @@ class MatFold:
                 np.random.shuffle(keep_possibilities)
                 selection = keep_possibilities[:end_keep_index]
 
-            df_split = df_split[df_split['structure_id'].isin(selection)]
+            df_split = df_split[df_split['structureid'].isin(selection)]
 
+        df_split['index'] = df_split.index
         self.df_decorated = df_split.copy()
 
     @staticmethod
@@ -192,7 +188,7 @@ class MatFold:
                       verbose: bool = False) -> None:
         """
         Creates splits based on split_type.
-        :param split_type: Defines the type of splitting, must be either "index", "structure_id",
+        :param split_type: Defines the type of splitting, must be either "index", "structureid",
         "composition", "chemsys", "sgnum", "crystalsys", or "elements"
         :param n_inner_splits: Number of inner splits (for nested k-fold)
         :param n_outer_splits: Number of outer splits (k-fold)
@@ -209,11 +205,9 @@ class MatFold:
         if output_dir is None:
             output_dir = os.getcwd()
 
-        if split_type not in ["index", "structure_id", "composition", "chemsys", "sgnum", "crystalsys", "elements"]:
-            raise ValueError('Error: `split_type` must be either "index", "structure_id", '
+        if split_type not in ["index", "structureid", "composition", "chemsys", "sgnum", "crystalsys", "elements"]:
+            raise ValueError('Error: `split_type` must be either "index", "structureid", '
                              '"composition", "chemsys", "sgnum", "crystalsys", or "elements"')
-        if split_type == "index":
-            split_type = 0
 
         out_df = self.df_decorated.copy()
 
@@ -236,12 +230,19 @@ class MatFold:
         # Remove splits from test set that have larger fractions than `max_fraction_testset`
         # then add their indices to `default_train_indices`
         remove_from_test = [k for k, v in self.split_statistics(split_type).items() if v > max_fraction_testset]
+        if verbose:
+            print(f"The following instances will be removed from possible test sets, as their fraction in the dataset "
+                  f"was higher than {max_fraction_testset}: {remove_from_test}.")
         add_train_indices = []
         for r in set(remove_from_test):
             test_possibilities.remove(r)
             add_train_indices.extend(list(out_df[out_df[split_type] == r].index))
-        default_train_indices.extend(add_train_indices)
-        default_train_indices = list(set(default_train_indices))
+        if split_type == "elements":
+            default_train_elements = remove_from_test.copy()
+        else:
+            default_train_indices.extend(add_train_indices)
+            default_train_indices = list(set(default_train_indices))
+            default_train_elements = []
 
         if len(test_possibilities) < n_outer_splits:
             raise ValueError(f'Error: `n_outer_splits`, {n_outer_splits}, is larger than available '
@@ -250,7 +251,7 @@ class MatFold:
                              f'cutoff of {max_fraction_testset}.')
 
         if verbose:
-            print(f'Default train indices (hard-coded for binaries right now) ({len(default_train_indices)}): ',
+            print(f'Default train indices ({len(default_train_indices)}): ',
                   default_train_indices)
             print('Possible test examples: ', set(test_possibilities))
         if n_inner_splits > 1:
@@ -262,17 +263,18 @@ class MatFold:
         else:
             raise ValueError("Error: `n_outer_splits` needs to be greater than 1.")
 
+        summary_outer_splits = pd.DataFrame(columns=['train', 'test', 'ntrain', 'ntest'])
+
         # Splits for outer loop
         for i, (train_outer_set_index, test_outer_set_index) in enumerate(kf_outer.split(test_possibilities)):
             # train structure ids
-            outer_train_set = set(np.take(test_possibilities, train_outer_set_index))
+            outer_train_set = set(np.take(test_possibilities, train_outer_set_index).tolist() + default_train_elements)
 
             # test structure ids
             outer_test_set = set(np.take(test_possibilities, test_outer_set_index))
 
-            outersplit_string = '-'.join(sorted(outer_test_set)) if split_type == "elements" else f"k{str(i)}"
             if verbose:
-                print('Splitting outer: ', outersplit_string)
+                print(f"Splitting outer: k{i} {'-'.join(sorted(outer_test_set)) if split_type == 'elements' else ''}")
                 print(outer_train_set)
                 print(outer_test_set)
 
@@ -294,12 +296,15 @@ class MatFold:
                     set(
                         out_df[
                             out_df.apply(
-                                lambda x: len(x['elements'] & outer_train_set) == len(x['elements']),
+                                lambda x: all([e in outer_train_set for e in x['elements']]),
+                                # check that all elements are in the outer training set options, if any is not,
+                                # then it won't be part of final training set indices
                                 axis=1
                             )
                         ].index
                     ) - set(default_train_indices)
                 )
+
                 # indices of all examples whose structures contain a test element
                 outer_test_indices = list(
                     set(
@@ -312,8 +317,12 @@ class MatFold:
                     ) - set(default_train_indices)
                 )
 
+            summary_outer_splits.loc[i, :] = [outer_train_set, outer_test_set,
+                                              len(outer_train_indices), len(outer_test_indices)]
+
             if len(outer_train_indices) == 0:
-                # every single structure has the test element(s), so no training is possible
+                print(f"Warning! Every structure contains test elements ({outer_test_set}) and splits "
+                      f"could not be created for outer fold k{i}.", flush=True)
                 continue
 
             outer_test_df = out_df.loc[outer_test_indices, :].copy()
@@ -322,13 +331,13 @@ class MatFold:
             self.check_split(out_df, [outer_train_df, outer_test_df], verbose=verbose)
 
             outer_train_df.loc[:, self.cols_to_keep].to_csv(
-                os.path.join(output_dir, write_base_str + f'.{split_type}.{outersplit_string}_outer.train.csv'),
-                header=False, index=False
+                os.path.join(output_dir, write_base_str + f'.{split_type}.k{i}_outer.train.csv'),
+                header=True, index=False
             )
 
             outer_test_df.loc[:, self.cols_to_keep].to_csv(
-                os.path.join(output_dir, write_base_str + f'.{split_type}.{outersplit_string}_outer.test.csv'),
-                header=False, index=False
+                os.path.join(output_dir, write_base_str + f'.{split_type}.k{i}_outer.test.csv'),
+                header=True, index=False
             )
 
             if kf_inner is not None:
@@ -347,16 +356,21 @@ class MatFold:
 
                     inner_train_df.loc[:, self.cols_to_keep].to_csv(
                         os.path.join(output_dir,
-                                     write_base_str + f'.{split_type}.{outersplit_string}_outer.l{j}_inner.train.csv'),
-                        header=False, index=False
+                                     write_base_str + f'.{split_type}.k{i}_outer.l{j}_inner.train.csv'),
+                        header=True, index=False
                     )
                     inner_test_df.loc[:, self.cols_to_keep].to_csv(
                         os.path.join(output_dir,
-                                     write_base_str + f'.{split_type}.k{outersplit_string}_outer.l{j}_inner.test.csv'),
-                        header=False, index=False
+                                     write_base_str + f'.{split_type}.k{i}_outer.l{j}_inner.test.csv'),
+                        header=True, index=False
                     )
 
                     self.check_split(out_df, [outer_test_df, inner_train_df, inner_test_df], verbose=verbose)
+
+        summary_outer_splits.index.name = 'n'
+        summary_outer_splits.to_csv(os.path.join(output_dir, write_base_str +
+                                                 f'.{split_type}.k{n_outer_splits}.l{n_inner_splits}.'
+                                                 f'{self.return_frac}_summary.csv'))
 
 
 if __name__ == "__main__":
@@ -371,6 +385,6 @@ if __name__ == "__main__":
                  return_frac=0.5, always_include_n_elements=2)
     stats = mf.split_statistics('crystalsys')
     print(stats)
-    mf.create_splits("elements", n_outer_splits=5, n_inner_splits=1,
+    mf.create_splits("composition", n_outer_splits=5, n_inner_splits=5,
                      max_fraction_testset=0.3, keep_n_elements_in_train=2,
                      output_dir='./output/', verbose=True)

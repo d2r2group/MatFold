@@ -1,4 +1,4 @@
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __author__ = 'M. D. Witman and P. Schindler'
 
 from .main import MatFold, cifs_to_dict
