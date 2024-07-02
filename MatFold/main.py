@@ -95,6 +95,14 @@ class MatFold:
         self.df['nelements'] = [len(structures[id_].composition.get_el_amt_dict().keys())
                                 for id_ in self.df['structureid']]
 
+        self.df['periodictablerows'] = [sorted(list(set([f'row{el.row}'
+                                                         for el in structures[id_].composition.elements])))
+                                        for id_ in self.df['structureid']]
+
+        self.df['periodictablegroups'] = [sorted(list(set([f'group{el.group}'
+                                                           for el in structures[id_].composition.elements])))
+                                          for id_ in self.df['structureid']]
+
         if return_frac < 1.0:
             np.random.seed(self.seed)
             if len(always_include_n_elements) > 0:
@@ -122,21 +130,23 @@ class MatFold:
 
     def split_statistics(self, split_type: str) -> dict:
         """
-        Analyzes the statistics of the sgnum, crystalsys, chemsys, composition, or elements splits.
+        Analyzes the statistics of the sgnum, crystalsys, chemsys, composition, elements,
+        periodictablerows, and periodictablegroups splits.
         :param split_type: String specifying the splitting type
         :return: Dictionary with keys of unique split values and the corresponding fraction of this key being
         represented in the entire dataset.
         """
-        if split_type not in ["chemsys", "composition", "sgnum", "crystalsys", "elements"]:
+        if split_type not in ["chemsys", "composition", "sgnum", "crystalsys",
+                              "elements", "periodictablerows", "periodictablegroups"]:
             return {}
-        if split_type == "elements":
+        if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
             statistics = {key: 0. for key in list(set(itertools.chain.from_iterable(self.df[split_type])))}
         else:
             statistics = {key: 0. for key in list(set(self.df[split_type]))}
         for uk in statistics.keys():
             n = 0
             for s in self.df[split_type]:
-                if split_type == "elements":
+                if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
                     for e in s:
                         if e == uk:
                             n += 1
@@ -155,13 +165,13 @@ class MatFold:
         """
         Creates splits based on split_type.
         :param split_type: Defines the type of splitting, must be either "index", "structureid",
-        "composition", "chemsys", "sgnum", "crystalsys", or "elements"
+        "composition", "chemsys", "sgnum", "crystalsys", "elements", "periodictablerows", or "periodictablegroups"
         :param n_inner_splits: Number of inner splits (for nested k-fold)
         :param n_outer_splits: Number of outer splits (k-fold)
         :param default_train_cutoff_fraction: If a split possiblity exceeds this fraction in the entire dataset
         then the corresponding indices will be forced to be in the training set by default.
         :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
-        in the test set by default (i.e., not k-folded).
+        in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
         :param min_train_test_factor: Minimum factor that the training set needs to be
         larger (for factors greater than 1.0) than the test set.
         :param inner_equals_outer_split_strategy: If true, then the inner splitting strategy used is equal to
@@ -174,9 +184,11 @@ class MatFold:
         if output_dir is None:
             output_dir = os.getcwd()
 
-        if split_type not in ["index", "structureid", "composition", "chemsys", "sgnum", "crystalsys", "elements"]:
+        if split_type not in ["index", "structureid", "composition", "chemsys", "sgnum", "crystalsys",
+                              "elements", "periodictablerows", "periodictablegroups"]:
             raise ValueError('Error: `split_type` must be either "index", "structureid", '
-                             '"composition", "chemsys", "sgnum", "crystalsys", or "elements"')
+                             '"composition", "chemsys", "sgnum", "crystalsys", '
+                             '"elements", "periodictablerows", or "periodictablegroups"')
 
         if keep_n_elements_in_train is None:
             keep_n_elements_in_train = []
@@ -199,7 +211,7 @@ class MatFold:
         for r in set(remove_from_test):
             split_possibilities.remove(r)
             add_train_indices.extend(list(self.df[self.df[split_type] == r].index))
-        if split_type == "elements":
+        if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
             default_train_elements = remove_from_test.copy()
         else:
             default_train_indices.extend(add_train_indices)
@@ -213,8 +225,8 @@ class MatFold:
                              f'cutoff of {default_train_cutoff_fraction}.')
 
         if verbose:
-            if split_type == 'elements':
-                print(f'Default train elements ({len(default_train_elements)}): {default_train_elements}')
+            if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
+                print(f'Default train {split_type} ({len(default_train_elements)}): {default_train_elements}')
             print(f'Default train indices ({len(default_train_indices)}): ', default_train_indices)
             print(f'Possible test examples: {split_possibilities}')
         if n_inner_splits > 1:
@@ -410,7 +422,7 @@ class MatFold:
         """
         if default_train_indices is None:
             default_train_indices = []
-        if split_type != "elements":
+        if split_type not in ["elements", "periodictablerows", "periodictablegroups"]:
             # indices of all examples for outer train fold (less any specified by default_train_indices)
             train_indices = list(
                 set(self.df[self.df[split_type].isin(train_set)].index) - set(default_train_indices)
@@ -425,7 +437,7 @@ class MatFold:
                 set(
                     self.df[
                         self.df.apply(
-                            lambda x: all([e in train_set for e in x['elements']]),
+                            lambda x: all([e in train_set for e in x[split_type]]),
                             # check that all elements are in the training set options, if any is not,
                             # then it won't be part of final training set indices
                             axis=1
@@ -439,7 +451,7 @@ class MatFold:
                 set(
                     self.df[
                         self.df.apply(
-                            lambda x: len(x['elements'] & test_set) > 0,
+                            lambda x: any([e in test_set for e in x[split_type]]),
                             axis=1
                         )
                     ].index
@@ -456,15 +468,15 @@ class MatFold:
         :return: List of unique split labels
         """
         if len(keep_n_elements_in_train) > 0:
-            if split_type == "elements":
+            if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
                 split_possibilities = list(set(itertools.chain.from_iterable(
-                    self.df[~self.df['nelements'].isin(keep_n_elements_in_train)]['elements'])))
+                    self.df[~self.df['nelements'].isin(keep_n_elements_in_train)][split_type])))
             else:
                 split_possibilities = list(
                     set(self.df[~self.df['nelements'].isin(keep_n_elements_in_train)][split_type]))
         else:
-            if split_type == "elements":
-                split_possibilities = list(set(itertools.chain.from_iterable(self.df['elements'])))
+            if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
+                split_possibilities = list(set(itertools.chain.from_iterable(self.df[split_type])))
             else:
                 split_possibilities = list(set(self.df[split_type]))
         return sorted(split_possibilities)
@@ -480,8 +492,8 @@ if __name__ == "__main__":
         cifs = json.load(fp)
     mf = MatFold(pd.read_csv('./test.csv', header=None), cifs,
                  return_frac=0.5, always_include_n_elements=None)
-    stats = mf.split_statistics('crystalsys')
+    stats = mf.split_statistics('periodictablegroups')
     print(stats)
-    mf.create_splits("sgnum", n_outer_splits=10, n_inner_splits=10,
-                     default_train_cutoff_fraction=1, keep_n_elements_in_train=None, min_train_test_factor=2.0,
+    mf.create_splits("periodictablegroups", n_outer_splits=3, n_inner_splits=2,
+                     default_train_cutoff_fraction=0.8, keep_n_elements_in_train=None, min_train_test_factor=None,
                      output_dir='./output/', verbose=True)
