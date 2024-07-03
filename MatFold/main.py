@@ -340,6 +340,65 @@ class MatFold:
                                                  f'.{split_type}.summary.k{n_outer_splits}.l{n_inner_splits}.'
                                                  f'{self.return_frac}.csv'))
 
+    def create_loo_split(self, split_type: str, loo_label: str, keep_n_elements_in_train: list | int | None = None,
+                         write_base_str: str = 'mf', output_dir: str | os.PathLike | None = None,
+                         verbose: bool = False) -> None:
+        """
+        Creates leave-one-out split by `split_type` and specified `loo_label`.
+        :param split_type: Defines the type of splitting, must be either "structureid", "composition", "chemsys",
+        "sgnum", "crystalsys", "elements", "periodictablerows", or "periodictablegroups".
+        :param loo_label: Label specifying which single option is to be left out (i.e., constitute the test set).
+        This label must be a valid option for the specified `split_type`.
+        :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
+        in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
+        :param write_base_str: Beginning string of csv file names of the written splits
+        :param output_dir: Directory where the splits are written to
+        :param verbose: Whether to print out details during code execution.
+        :return: None
+        """
+        if output_dir is None:
+            output_dir = os.getcwd()
+
+        if split_type not in ["structureid", "composition", "chemsys", "sgnum", "crystalsys",
+                              "elements", "periodictablerows", "periodictablegroups"]:
+            raise ValueError('Error: `split_type` must be either "structureid", '
+                             '"composition", "chemsys", "sgnum", "crystalsys", '
+                             '"elements", "periodictablerows", or "periodictablegroups"')
+
+        if keep_n_elements_in_train is None:
+            keep_n_elements_in_train = []
+        elif isinstance(keep_n_elements_in_train, int):
+            keep_n_elements_in_train = [keep_n_elements_in_train]
+
+        default_train_indices = list(self.df[self.df['nelements'].isin(keep_n_elements_in_train)].index
+                                     ) if len(keep_n_elements_in_train) > 0 else []
+        split_possibilities = self._get_unique_split_possibilities(keep_n_elements_in_train, split_type)
+
+        if loo_label not in split_possibilities:
+            raise ValueError(f'Error. LOO label ({loo_label}) is not in `split_possibilities` of type {split_type}.')
+
+        summary_loo_split = pd.DataFrame(columns=['n', 'l', 'train', 'test', 'ntrain', 'ntest', 'comment'])
+
+        train_set = [sp for sp in split_possibilities if sp != loo_label]
+        test_set = [loo_label]
+
+        train_indices, test_indices = self._get_split_indices(train_set, test_set, default_train_indices, split_type)
+
+        if len(train_indices + default_train_indices) == 0 or len(test_indices) == 0:
+            raise Exception(f"Error. Either train (len={len(train_indices + default_train_indices)}) or test "
+                            f"(len={len(test_indices)}) set is empty and split cannot be created.")
+
+        path_outer = os.path.join(output_dir, write_base_str + f'.{split_type}.loo.{loo_label.replace("/", "_")}.csv')
+        train_df, test_df = self._save_split_dfs(train_indices, test_indices, default_train_indices, path_outer)
+        self._check_split_dfs([train_df, test_df], verbose=verbose)
+
+        summary_loo_split.loc[len(summary_loo_split.index) + 1, :] = \
+            [0, 0, train_set, test_set, len(train_df), len(test_df), 'loo split']
+
+        summary_loo_split.to_csv(os.path.join(output_dir, write_base_str +
+                                              f'.{split_type}.summary.loo.{loo_label.replace("/", "_")}.'
+                                              f'{self.return_frac}.csv'))
+
     @staticmethod
     def _check_split_indices_passed(train_indices: list[int], test_indices: list[int],
                                     min_train_test_factor: float | None) -> bool:
@@ -463,7 +522,7 @@ class MatFold:
         """
         Determines the list of possible unique split labels for the given `split_type`.
         :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
-        in the test set by default (i.e., not k-folded).
+        in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
         :param split_type: String specifying the splitting type
         :return: List of unique split labels
         """
@@ -492,8 +551,10 @@ if __name__ == "__main__":
         cifs = json.load(fp)
     mf = MatFold(pd.read_csv('./test.csv', header=None), cifs,
                  return_frac=0.5, always_include_n_elements=None)
-    stats = mf.split_statistics('periodictablegroups')
+    stats = mf.split_statistics('crystalsys')
     print(stats)
     mf.create_splits("periodictablegroups", n_outer_splits=3, n_inner_splits=2,
                      default_train_cutoff_fraction=0.8, keep_n_elements_in_train=None, min_train_test_factor=None,
                      output_dir='./output/', verbose=True)
+    mf.create_loo_split("elements", 'Fe', keep_n_elements_in_train=None,
+                        output_dir='./output/', verbose=True)

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='MatFold',
-    version='0.3.1',
+    version='0.3.2',
     url='https://github.com/d2r2group/MatFold',
     description='Package for systematic insights into materials discovery models’ performance through standardized '
                 'chemical cross-validation protocols',
