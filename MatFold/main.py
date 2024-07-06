@@ -158,7 +158,8 @@ class MatFold:
         return statistics
 
     def create_splits(self, split_type: str, n_inner_splits: int = 10, n_outer_splits: int = 10,
-                      default_train_cutoff_fraction: float = 1.0, keep_n_elements_in_train: list | int | None = None,
+                      fraction_upper_limit: float = 1.0, fraction_lower_limit: float = 0.0,
+                      keep_n_elements_in_train: list | int | None = None,
                       min_train_test_factor: float | None = None, inner_equals_outer_split_strategy: bool = True,
                       write_base_str: str = 'mf', output_dir: str | os.PathLike | None = None,
                       verbose: bool = False) -> None:
@@ -168,8 +169,10 @@ class MatFold:
         "composition", "chemsys", "sgnum", "crystalsys", "elements", "periodictablerows", or "periodictablegroups"
         :param n_inner_splits: Number of inner splits (for nested k-fold)
         :param n_outer_splits: Number of outer splits (k-fold)
-        :param default_train_cutoff_fraction: If a split possiblity exceeds this fraction in the entire dataset
-        then the corresponding indices will be forced to be in the training set by default.
+        :param fraction_upper_limit: If a split possiblity is represented in the dataset with a fraction above
+        this limit then the corresponding indices will be forced to be in the training set by default.
+        :param fraction_lower_limit: If a split possiblity is represented in the dataset with a fraction below
+        this limit then the corresponding indices will be forced to be in the training set by default.
         :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
         in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
         :param min_train_test_factor: Minimum factor that the training set needs to be
@@ -184,6 +187,11 @@ class MatFold:
         if output_dir is None:
             output_dir = os.getcwd()
 
+        if (fraction_upper_limit < 0.0 or fraction_upper_limit > 1.0 or
+                fraction_lower_limit < 0.0 or fraction_lower_limit > 1.0):
+            raise ValueError("Error: `fraction_upper_limit` and `fraction_lower_limit` need to be "
+                             "greater or equal to 0.0 and less or equal to 1.0")
+
         if split_type not in ["index", "structureid", "composition", "chemsys", "sgnum", "crystalsys",
                               "elements", "periodictablerows", "periodictablegroups"]:
             raise ValueError('Error: `split_type` must be either "index", "structureid", '
@@ -195,6 +203,11 @@ class MatFold:
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
 
+        for n in keep_n_elements_in_train:
+            if n not in self.df['nelements'].tolist():
+                raise ValueError(f"Error: No structure exists in the dataset that contain {n} elements. "
+                                 f"Adjust `keep_n_elements_in_train` accordingly.")
+
         default_train_indices = list(self.df[self.df['nelements'].isin(keep_n_elements_in_train)].index
                                      ) if len(keep_n_elements_in_train) > 0 else []
         split_possibilities = self._get_unique_split_possibilities(keep_n_elements_in_train, split_type)
@@ -202,11 +215,11 @@ class MatFold:
         # Remove splits from test set that have larger fractions than `max_fraction_testset`
         # then add their indices to `default_train_indices`
         remove_from_test_dict = {k: round(v, 3) for k, v in self.split_statistics(split_type).items()
-                                 if v > default_train_cutoff_fraction}
+                                 if v > fraction_upper_limit or v < fraction_lower_limit}
         remove_from_test = list(remove_from_test_dict.keys())
         if verbose:
             print(f"The following instances will be removed from possible test sets, as their fraction in the dataset "
-                  f"was higher than {default_train_cutoff_fraction}: {remove_from_test_dict}.")
+                  f"was higher than {fraction_upper_limit}: {remove_from_test_dict}.")
         add_train_indices = []
         for r in set(remove_from_test):
             split_possibilities.remove(r)
@@ -221,8 +234,8 @@ class MatFold:
         if len(split_possibilities) < n_outer_splits:
             raise ValueError(f'Error: `n_outer_splits`, {n_outer_splits}, is larger than available '
                              f'`split_possibilities`, {len(split_possibilities)} '
-                             f'for splitting strategy {split_type} and `max_fraction_testset` '
-                             f'cutoff of {default_train_cutoff_fraction}.')
+                             f'for splitting strategy {split_type} and `fraction_lower_limit` / `fraction_upper_limit` '
+                             f'of {fraction_lower_limit} / {fraction_upper_limit}.')
 
         if verbose:
             if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
@@ -280,7 +293,7 @@ class MatFold:
                     raise ValueError(f'Error: `n_inner_splits`, {n_inner_splits}, is larger than available '
                                      f'`split_possibilities` of the inner train set, {len(inner_split_possibilities)} '
                                      f'for splitting strategy {split_type}, `max_fraction_testset` '
-                                     f'cutoff of {default_train_cutoff_fraction}, and `n_outer_splits` of {n_outer_splits}.')
+                                     f'cutoff of {fraction_upper_limit}, and `n_outer_splits` of {n_outer_splits}.')
                 for j, (inner_train_possibility_indices, inner_test_possibility_indices) in (
                         enumerate(kf_inner.split(list(inner_split_possibilities)))):
                     # Inner train structure ids
@@ -369,6 +382,11 @@ class MatFold:
             keep_n_elements_in_train = []
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
+
+        for n in keep_n_elements_in_train:
+            if n not in self.df['nelements'].tolist():
+                raise ValueError(f"Error: No structure exists in the dataset that contain {n} elements. "
+                                 f"Adjust `keep_n_elements_in_train` accordingly.")
 
         default_train_indices = list(self.df[self.df['nelements'].isin(keep_n_elements_in_train)].index
                                      ) if len(keep_n_elements_in_train) > 0 else []
@@ -554,7 +572,7 @@ if __name__ == "__main__":
     stats = mf.split_statistics('crystalsys')
     print(stats)
     mf.create_splits("periodictablegroups", n_outer_splits=3, n_inner_splits=2,
-                     default_train_cutoff_fraction=0.8, keep_n_elements_in_train=None, min_train_test_factor=None,
+                     fraction_upper_limit=0.8, keep_n_elements_in_train=2, min_train_test_factor=None,
                      output_dir='./output/', verbose=True)
     mf.create_loo_split("elements", 'Fe', keep_n_elements_in_train=None,
                         output_dir='./output/', verbose=True)
