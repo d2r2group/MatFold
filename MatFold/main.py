@@ -87,6 +87,8 @@ class MatFold:
 
         self.df['sgnum'] = [str(space_groups[id_].get_space_group_symbol()) for id_ in self.df['structureid']]
 
+        self.df['pointgroup'] = [str(space_groups[id_].get_point_group_symbol()) for id_ in self.df['structureid']]
+
         self.df['crystalsys'] = [str(space_groups[id_].get_crystal_system()) for id_ in self.df['structureid']]
 
         self.df['elements'] = [structures[id_].composition.get_el_amt_dict().keys()
@@ -130,13 +132,13 @@ class MatFold:
 
     def split_statistics(self, split_type: str) -> dict:
         """
-        Analyzes the statistics of the sgnum, crystalsys, chemsys, composition, elements,
+        Analyzes the statistics of the sgnum, pointgroup, crystalsys, chemsys, composition, elements,
         periodictablerows, and periodictablegroups splits.
         :param split_type: String specifying the splitting type
         :return: Dictionary with keys of unique split values and the corresponding fraction of this key being
         represented in the entire dataset.
         """
-        if split_type not in ["chemsys", "composition", "sgnum", "crystalsys",
+        if split_type not in ["chemsys", "composition", "sgnum", "pointgroup", "crystalsys",
                               "elements", "periodictablerows", "periodictablegroups"]:
             return {}
         if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
@@ -165,8 +167,8 @@ class MatFold:
                       verbose: bool = False) -> None:
         """
         Creates splits based on split_type.
-        :param split_type: Defines the type of splitting, must be either "index", "structureid",
-        "composition", "chemsys", "sgnum", "crystalsys", "elements", "periodictablerows", or "periodictablegroups"
+        :param split_type: Defines the type of splitting, must be either "index", "structureid", "composition",
+        "chemsys", "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups"
         :param n_inner_splits: Number of inner splits (for nested k-fold)
         :param n_outer_splits: Number of outer splits (k-fold)
         :param fraction_upper_limit: If a split possiblity is represented in the dataset with a fraction above
@@ -192,10 +194,10 @@ class MatFold:
             raise ValueError("Error: `fraction_upper_limit` and `fraction_lower_limit` need to be "
                              "greater or equal to 0.0 and less or equal to 1.0")
 
-        if split_type not in ["index", "structureid", "composition", "chemsys", "sgnum", "crystalsys",
+        if split_type not in ["index", "structureid", "composition", "chemsys", "pointgroup", "sgnum", "crystalsys",
                               "elements", "periodictablerows", "periodictablegroups"]:
             raise ValueError('Error: `split_type` must be either "index", "structureid", '
-                             '"composition", "chemsys", "sgnum", "crystalsys", '
+                             '"composition", "chemsys", "sgnum", "pointgroup", "crystalsys", '
                              '"elements", "periodictablerows", or "periodictablegroups"')
 
         if keep_n_elements_in_train is None:
@@ -359,7 +361,7 @@ class MatFold:
         """
         Creates leave-one-out split by `split_type` and specified `loo_label`.
         :param split_type: Defines the type of splitting, must be either "structureid", "composition", "chemsys",
-        "sgnum", "crystalsys", "elements", "periodictablerows", or "periodictablegroups".
+        "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups".
         :param loo_label: Label specifying which single option is to be left out (i.e., constitute the test set).
         This label must be a valid option for the specified `split_type`.
         :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
@@ -372,10 +374,10 @@ class MatFold:
         if output_dir is None:
             output_dir = os.getcwd()
 
-        if split_type not in ["structureid", "composition", "chemsys", "sgnum", "crystalsys",
+        if split_type not in ["structureid", "composition", "chemsys", "sgnum", "pointgroup", "crystalsys",
                               "elements", "periodictablerows", "periodictablegroups"]:
             raise ValueError('Error: `split_type` must be either "structureid", '
-                             '"composition", "chemsys", "sgnum", "crystalsys", '
+                             '"composition", "chemsys", "sgnum", "pointgroup", "crystalsys", '
                              '"elements", "periodictablerows", or "periodictablegroups"')
 
         if keep_n_elements_in_train is None:
@@ -571,7 +573,7 @@ if __name__ == "__main__":
                  return_frac=0.5, always_include_n_elements=None)
     stats = mf.split_statistics('crystalsys')
     print(stats)
-    mf.create_splits("periodictablegroups", n_outer_splits=3, n_inner_splits=2,
+    mf.create_splits("pointgroup", n_outer_splits=3, n_inner_splits=2,
                      fraction_upper_limit=0.8, keep_n_elements_in_train=2, min_train_test_factor=None,
                      output_dir='./output/', verbose=True)
     mf.create_loo_split("elements", 'Fe', keep_n_elements_in_train=None,
