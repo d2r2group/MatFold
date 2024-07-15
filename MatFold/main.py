@@ -169,8 +169,11 @@ class MatFold:
         Creates splits based on split_type.
         :param split_type: Defines the type of splitting, must be either "index", "structureid", "composition",
         "chemsys", "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups"
-        :param n_inner_splits: Number of inner splits (for nested k-fold)
-        :param n_outer_splits: Number of outer splits (k-fold)
+        :param n_inner_splits: Number of inner splits (for nested k-fold); if set to 0, then `n_inner_splits` is set
+        equal to the number of inner test possiblities (i.e., each inner test set holds one possibility out
+        for all possible options)
+        :param n_outer_splits: Number of outer splits (k-fold); if set to 0, then `n_outer_splits` is set equal to the
+        number of test possiblities (i.e., each outer test set holds one possibility out for all possible options)
         :param fraction_upper_limit: If a split possiblity is represented in the dataset with a fraction above
         this limit then the corresponding indices will be forced to be in the training set by default.
         :param fraction_lower_limit: If a split possiblity is represented in the dataset with a fraction below
@@ -221,7 +224,8 @@ class MatFold:
         remove_from_test = list(remove_from_test_dict.keys())
         if verbose:
             print(f"The following instances will be removed from possible test sets, as their fraction in the dataset "
-                  f"was higher than {fraction_upper_limit}: {remove_from_test_dict}.")
+                  f"was higher than {fraction_upper_limit} or "
+                  f"lower than {fraction_lower_limit}: {remove_from_test_dict}.")
         add_train_indices = []
         for r in set(remove_from_test):
             split_possibilities.remove(r)
@@ -232,6 +236,9 @@ class MatFold:
             default_train_indices.extend(add_train_indices)
             default_train_indices = list(set(default_train_indices))
             default_train_elements = []
+
+        if n_outer_splits == 0:
+            n_outer_splits = len(split_possibilities)
 
         if len(split_possibilities) < n_outer_splits:
             raise ValueError(f'Error: `n_outer_splits`, {n_outer_splits}, is larger than available '
@@ -244,10 +251,6 @@ class MatFold:
                 print(f'Default train {split_type} ({len(default_train_elements)}): {default_train_elements}')
             print(f'Default train indices ({len(default_train_indices)}): ', default_train_indices)
             print(f'Possible test examples: {split_possibilities}')
-        if n_inner_splits > 1:
-            kf_inner = KFold(n_splits=n_inner_splits, random_state=self.seed, shuffle=True)
-        else:
-            kf_inner = None
         if n_outer_splits > 1:
             kf_outer = KFold(n_splits=n_outer_splits, random_state=self.seed, shuffle=True)
         else:
@@ -289,8 +292,16 @@ class MatFold:
             summary_outer_splits.loc[len(summary_outer_splits.index) + 1, :] = \
                 [i, -1, outer_train_set, outer_test_set, len(outer_train_df), len(outer_test_df), 'split successful']
 
+            # Splits for inner loop
+            inner_split_possibilities = [split for split in outer_train_set if split not in default_train_elements]
+            if n_inner_splits == 0:
+                n_inner_splits = len(inner_split_possibilities)
+            if n_inner_splits > 1:
+                kf_inner = KFold(n_splits=n_inner_splits, random_state=self.seed, shuffle=True)
+            else:
+                kf_inner = None
+
             if kf_inner is not None and inner_equals_outer_split_strategy:
-                inner_split_possibilities = [split for split in outer_train_set if split not in default_train_elements]
                 if len(inner_split_possibilities) < n_inner_splits:
                     raise ValueError(f'Error: `n_inner_splits`, {n_inner_splits}, is larger than available '
                                      f'`split_possibilities` of the inner train set, {len(inner_split_possibilities)} '
@@ -573,7 +584,7 @@ if __name__ == "__main__":
                  return_frac=0.5, always_include_n_elements=None)
     stats = mf.split_statistics('crystalsys')
     print(stats)
-    mf.create_splits("pointgroup", n_outer_splits=3, n_inner_splits=2,
+    mf.create_splits("crystalsys", n_outer_splits=0, n_inner_splits=0,
                      fraction_upper_limit=0.8, keep_n_elements_in_train=2, min_train_test_factor=None,
                      output_dir='./output/', verbose=True)
     mf.create_loo_split("elements", 'Fe', keep_n_elements_in_train=None,
