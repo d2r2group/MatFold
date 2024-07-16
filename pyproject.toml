@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools >= 64.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "MatFold"
+dynamic = ["version"]
+dependencies = [
+    'numpy',
+    'pandas',
+    'scikit-learn>=1.4',
+    'pymatgen>=2024'
+]
+requires-python = ">=3.10"
+authors = [
+    {name = "Peter Schindler", email = "p.schindler@northeastern.edu"},
+    {name = "Matthew D. Witman", email = "mwitman@sandia.gov"}
+]
+maintainers = [
+    {name = "Peter Schindler", email = "p.schindler@northeastern.edu"}
+]
+description = "Package for systematic insights into materials discovery models’ performance through standardized chemical cross-validation protocols"
+readme = "README.md"
+license = {file = "LICENSE.md"}
+keywords = ["machine learning", "materials science", "cross-validation", "generalization error"]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "License :: OSI Approved :: MIT License"
+]
+
+[project.optional-dependencies]
+dev = ["twine"]
+
+[tool.setuptools_scm]
