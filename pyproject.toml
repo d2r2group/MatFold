@@ -36,7 +36,10 @@ classifiers = [
     "License :: OSI Approved :: MIT License"
 ]
 
+[project.urls]
+Repository = "https://github.com/d2r2group/MatFold"
+
 [project.optional-dependencies]
-dev = ["twine"]
+dev = ["twine", "build"]
 
 [tool.setuptools_scm]

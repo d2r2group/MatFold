@@ -25,7 +25,7 @@ def cifs_to_dict(directory: str | os.PathLike) -> dict:
 
 class MatFold:
 
-    def __init__(self, df: pd.DataFrame, bulk_df: dict,
+    def __init__(self, df: pd.DataFrame, bulk_dict: dict,
                  return_frac: float = 1.0, always_include_n_elements: list | int | None = None,
                  cols_to_keep: list | None = None, seed: int = 0) -> None:
         """
@@ -34,7 +34,7 @@ class MatFold:
         `<structureid>:<structuretag>` (where <structureid> refers to a bulk ID and <structuretag> refers to
         an identifier of a derivative structure). All other columns are optional and may be retained specifying the
         `cols_to_keep` parameter described below.
-        :param bulk_df: Dictionary containing <structureid> as keys and the corresponding bulk pymatgen
+        :param bulk_dict: Dictionary containing <structureid> as keys and the corresponding bulk pymatgen
         dictionary as values.
         :param return_frac: The fraction of the df dataset that is utilized during splitting.
         Must be larger than 0.0 and equal/less than 1.0 (=100%).
@@ -69,11 +69,11 @@ class MatFold:
         unique_structures = set(self.df['structureid'])
 
         for us in unique_structures:
-            if us not in bulk_df:
+            if us not in bulk_dict:
                 raise ValueError(f"Error: Structure {us} not in `bulk_df` data.")
 
         structures = dict(
-            [(id_, Structure.from_dict(bulk_df[id_])) for id_ in unique_structures]
+            [(id_, Structure.from_dict(bulk_dict[id_])) for id_ in unique_structures]
         )
 
         space_groups = dict(
