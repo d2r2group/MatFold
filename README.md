@@ -12,20 +12,19 @@ This is a Python package for gaining systematic insights into materials discover
 performance through standardized chemical and structural cross-validation protocols.
 
 Please, cite the following paper if you use the model in your research:
-> Matthew D. Witman, Peter Schindler, Anthony H. McDaniel, Robert Wexler, Anuj Goyal,
-> and Stephan Lany, *MatFold: systematic insights into materials discovery models’ performance 
-> through standardized chemical cross-validation protocols*
+> Matthew D. Witman and Peter Schindler, *MatFold: systematic insights into materials discovery models’ performance 
+> through standardized cross-validation protocols*, ArXiv (2024)
 
 ## Installation
 
-MatFold can be installed using pip by running `pip install MatFold`.
+`MatFold` can be installed using pip by running `pip install MatFold`.
 Alternatively, this repository can be downloaded/cloned and then installed by running `pip install .` inside the main folder.
 
 ## Usage
 
 ### Data Preparation and Loading
 
-To utilize MatFold, the user has to provide their materials data as a Pandas dataframe and 
+To utilize `MatFold`, the user has to provide their materials data as a Pandas dataframe and 
 a dictionary for initialization: 
 `df` and `bulk_dict`.
 
@@ -35,7 +34,7 @@ refers to an identifier of a derivative structure). All other columns are option
 retained during the splitting process by default. 
 
 The dictionary `bulk_dict` has to contain `<structureid>` as keys and the corresponding bulk pymatgen
-dictionary as values. This dictionary can also be directly created from bulk cif files 
+dictionary as values. This dictionary can also be directly created from cif files 
 using the convenience function `cifs_to_dict`. The user should ensure that all bulk structures that 
 are referred to in the `df` labels are provided in `bulk_dict` (and each string 
 specifying `structureid` should match).
@@ -43,7 +42,7 @@ specifying `structureid` should match).
 During initialization of `MatFold` the user can also pick a random subset of the data by specifying the 
 variable `return_frac`. When this value is set to less than 1.0, then the variable 
 `always_include_n_elements` can be specified to ensure that materials with a certain number of unique elements 
-is always included (i.e., not affected by the `return_frac` sampling). 
+is always included (*i.e.*, not affected by the `return_frac` sampling). 
 For example, `always_include_n_elements=[1, 2]` would ensure that all elemental and binary compounds remain 
 in the selected subset of the data.
 
@@ -51,15 +50,23 @@ in the selected subset of the data.
 
 Once the `MatFold` class is initialized with the material data, the user can choose from various chemical and 
 structural holdout strategies when creating their splits. The available splitting options are: 
-*"index"* (naive random splitting), *"structureid"*, *"composition"*, *"chemsys"*, *"sgnum"*, 
-*"pointgroup"*, *"crystalsys"*, *"elements"*, *"periodictablerows"*, or *"periodictablegroups"*.
+ - *"index"* (naive random splitting)
+ - *"structureid"* (split by parent bulk structure - this is identical to *"index"* for datasets where each entry corresponds to a unique bulk structure)
+ - *"composition"*
+ - *"chemsys"*
+ - *"sgnum"* (Space group number)
+ - *"pointgroup"*
+ - *"crystalsys"*
+ - *"elements"*
+ - *"periodictablerows"*
+ - *"periodictablegroups"*
 
 Further, the user can analyze the distribution of unique split values and the corresponding 
 fraction (prevalence) in the dataset by using the class function `split_statistics`. 
 There are several optional variables that the user can specify (full list in the documentation below). 
 Most, notably the number of inner and outer splits for nested folding are specified in 
 `n_inner_splits` and `n_outer_splits`, respectively. If either of these two value is set to 0, 
-then `MatFold` will set them equal to the number of possible split label option (i.e., this corresponds 
+then `MatFold` will set them equal to the number of possible split label option (*i.e.*, this corresponds 
 to leave-one-out cross-validation).
 
 The user can also create a single leave-one-out split (rather than all possible splits) by utilizing the class 
@@ -68,14 +75,14 @@ the specified `split_type`.
 
 ### Example Use
 
-Below find an example of how running MatFold could look like:
+Below find an example of how running `MatFold` could look like:
 
 ```Python3
 from MatFold import MatFold
 import pandas as pd
 import json
 
-df = pd.read_csv('data.csv')  # Ensure that first column contain the correct label format
+df = pd.read_csv('data.csv')  # Ensure that first column contains the correct label format
 with open('bulk.json', 'r') as fp:  
     # Ensure all bulk pymatgen dictionaries are contained with the same key as specified in `df`
     bulk_dict = json.load(fp)
@@ -93,7 +100,7 @@ mf.create_loo_split('elements', 'Fe', output_dir='./output/', verbose=True)
 
 ## Code Documentation
 
-Below find a detailed documentation of all MatFold capabilities and description of variables.
+Below find a detailed documentation of all `MatFold` capabilities and description of variables.
 
 ### Function `cifs_to_dict`
 
