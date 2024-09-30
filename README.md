@@ -9,7 +9,7 @@
 [![DOI](https://zenodo.org/badge/DOI/<...>.svg)](https://doi.org/<...>)
 
 This is a Python package for gaining systematic insights into materials discovery models’ 
-performance through standardized chemical and structural cross-validation protocols.
+performance through standardized, reproducible, and featurization-agnostic chemical and structural cross-validation protocols.
 
 Please, cite the following paper if you use the model in your research:
 > Matthew D. Witman and Peter Schindler, *MatFold: systematic insights into materials discovery models’ performance 
@@ -152,6 +152,37 @@ original df are kept.
 - `seed`: Seed for selecting random subset of data and splits.
 
 
+#### from\_json
+
+```python
+@classmethod
+def from_json(cls,
+              df: pd.DataFrame,
+              bulk_dict: dict,
+              json_file: str | os.PathLike,
+              create_splits: bool = True)
+```
+
+Reconstruct a `MatFold` class instance, along with its associated splits, from a JSON file previously generated 
+by the `create_splits` or `create_loo_split` methods. The same `df` and `bulk_dict` used during
+the original split creation must be provided to guarantee that the exact splits are regenerated.
+
+**Arguments**:
+
+- `df`: Pandas dataframe with the first column containing strings of either form `<structureid>` or
+`<structureid>:<structuretag>` (where <structureid> refers to a bulk ID and <structuretag> refers to
+an identifier of a derivative structure). All other columns are optional and may be retained specifying the
+`cols_to_keep` parameter described below.
+- `bulk_dict`: Dictionary containing <structureid> as keys and the corresponding bulk pymatgen
+dictionary as values.
+- `json_file`: Location of JSON file that is created when MatFold is used to generate splits.
+- `create_splits`: Whether to create splits with the same json settings
+
+**Returns**:
+
+MatFold class instance
+
+
 ### split\_statistics
 
 ```python
@@ -187,7 +218,14 @@ def create_splits(split_type: str,
                   verbose: bool = False) -> None
 ```
 
-Creates splits based on split_type.
+Creates splits based on `split_type`, `n_inner_splits`, `n_outer_splits` among other specifications 
+(cf. full list of function variables). The splits are saved in `output_dir` as csv files named
+`<write_base_str>.<split_type>.k<i>_outer.<train/test>.csv` and
+`<write_base_str>.<split_type>.k<i>_outer.l<j>_inner.<train/test>.csv` for all outer (index `<i>`) and inner
+splits (index `<j>`), respectively. Additionally, a summary of the created splits is saved as
+`<write_base_str>.<split_type>.summary.k<n_outer_splits>.l<n_inner_splits>.<self.return_frac>.csv`.
+Lastly, a JSON file is saved that stores all relevant class and function variables to recreate the splits
+utilizing the class function `from_json` and is named `<write_base_str>.<split_type>.json`.
 
 **Arguments**:
 
@@ -227,7 +265,12 @@ def create_loo_split(split_type: str,
                      verbose: bool = False) -> None
 ```
 
-Creates leave-one-out split by `split_type` and specified `loo_label`.
+Creates leave-one-out split based on `split_type`, specified `loo_label` and `keep_n_elements_in_train`.
+The splits are saved in `output_dir` as csv files named
+`<write_base_str>.<split_type>.loo.<loo_label>.<train/test>.csv`. Additionally, a summary of the created split
+is saved as `<write_base_str>.<split_type>.summary.loo.<loo_label>.<self.return_frac>.csv`.
+Lastly, a JSON file is saved that stores all relevant class and function variables to recreate the splits
+utilizing the class function `from_json` and is named `<write_base_str>.<split_type>.loo.<loo_label>.json`.
 
 **Arguments**:
 
