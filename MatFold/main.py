@@ -6,7 +6,7 @@ import inspect
 import hashlib
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold
+from utils import KFold
 from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from _version import __version__

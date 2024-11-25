@@ -8,7 +8,6 @@ dynamic = ["version"]
 dependencies = [
     'numpy',
     'pandas',
-    'scikit-learn>=1.4',
     'pymatgen>=2024'
 ]
 requires-python = ">=3.10"
