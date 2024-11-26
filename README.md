@@ -6,7 +6,7 @@
 
 ![Python - Version](https://img.shields.io/pypi/pyversions/MatFold)
 [![PyPI - Version](https://img.shields.io/pypi/v/MatFold?color=blue)](https://pypi.org/project/MatFold)
-[![DOI](https://zenodo.org/badge/DOI/<...>.svg)](https://doi.org/<...>)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13147391.svg)](https://doi.org/10.5281/zenodo.13147391)
 
 This is a Python package for gaining systematic insights into materials discovery models’ 
 performance through standardized, reproducible, and featurization-agnostic chemical and structural cross-validation protocols.
