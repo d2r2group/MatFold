@@ -13,7 +13,7 @@ performance through standardized, reproducible, and featurization-agnostic chemi
 
 Please, cite the following paper if you use the model in your research:
 > Matthew D. Witman and Peter Schindler, *MatFold: systematic insights into materials discovery models’ performance 
-> through standardized cross-validation protocols*, ArXiv (2024)
+> through standardized cross-validation protocols*, ChemRxiv (2024) [10.26434/chemrxiv-2024-bmw1n](https://doi.org/10.26434/chemrxiv-2024-bmw1n)
 
 ## Installation
 

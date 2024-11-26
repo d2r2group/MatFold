@@ -6,10 +6,10 @@ import inspect
 import hashlib
 import numpy as np
 import pandas as pd
-from utils import KFold
 from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from _version import __version__
+from .utils import KFold
+from ._version import __version__
 
 
 def cifs_to_dict(directory: str | os.PathLike) -> dict:
