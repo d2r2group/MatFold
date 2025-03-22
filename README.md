@@ -11,9 +11,22 @@
 This is a Python package for gaining systematic insights into materials discovery models’ 
 performance through standardized, reproducible, and featurization-agnostic chemical and structural cross-validation protocols.
 
-Please, cite the following paper if you use the model in your research:
-> Matthew D. Witman and Peter Schindler, *MatFold: systematic insights into materials discovery models’ performance 
-> through standardized cross-validation protocols*, ChemRxiv (2024) [10.26434/chemrxiv-2024-bmw1n](https://doi.org/10.26434/chemrxiv-2024-bmw1n)
+Please, cite the following [paper](https://doi.org/10.1039/D4DD00250D) if you use the framework in your research:
+```
+@article{Witman2025Mar,
+	author = {Witman, Matthew D. and Schindler, Peter},
+	title = {{MatFold: systematic insights into materials discovery models' performance through standardized cross-validation protocols}},
+	journal = {Digital Discovery},
+	volume = {4},
+	number = {3},
+	pages = {625--635},
+	year = {2025},
+	month = mar,
+	issn = {2635-098X},
+	publisher = {RSC},
+	doi = {10.1039/D4DD00250D}
+}
+```
 
 ## Installation
 
