@@ -1,5 +1,4 @@
-"""
-This reproduces a minimal version of the `KFold` class from scikit-learn (license below) to remove package dependency
+"""A minimal reproduction of the `KFold` class from scikit-learn to remove package dependency.
 
 BSD 3-Clause License
 
@@ -7,9 +6,11 @@ Copyright (c) 2007-2024 The scikit-learn developers.
 All rights reserved.
 
 """
+
+import numbers
+
 import numpy as np
 import pandas as pd
-import numbers
 
 
 def _num_samples(x):
@@ -45,12 +46,21 @@ def _num_samples(x):
 
 
 def check_consistent_length(*arrays):
+    """Check that all arrays have consistent first dimensions.
+
+    Args:
+        *arrays: List of arrays to check.
+
+    Raises:
+        ValueError: If arrays have inconsistent lengths.
+
+    """
     lengths = [_num_samples(X) for X in arrays if X is not None]
     uniques = np.unique(lengths)
     if len(uniques) > 1:
         raise ValueError(
             "Found input variables with inconsistent numbers of samples: %r"
-            % [int(l) for l in lengths]
+            % [int(length) for length in lengths]
         )
 
 
@@ -63,16 +73,40 @@ def _make_indexable(iterable):
 
 
 def indexable(*iterables):
+    """Make arrays indexable for cross-validation.
+
+    Args:
+        *iterables: List of objects to make indexable.
+
+    Returns:
+        List of indexable arrays.
+
+    Raises:
+        ValueError: If arrays have inconsistent lengths.
+
+    """
     result = [_make_indexable(X) for X in iterables]
     check_consistent_length(*result)
     return result
 
 
 def check_random_state(seed):
+    """Turn seed into a np.random.RandomState instance.
+
+    Args:
+        seed: None, int, or RandomState instance.
+
+    Returns:
+        RandomState instance.
+
+    Raises:
+        ValueError: If seed cannot be converted to RandomState.
+
+    """
     if seed is None or seed is np.random:
         return np.random.mtrand._rand
     if isinstance(seed, numbers.Integral):
-        return np.random.RandomState(seed)
+        return np.random.RandomState(int(seed))
     if isinstance(seed, np.random.RandomState):
         return seed
     raise ValueError(
@@ -81,7 +115,21 @@ def check_random_state(seed):
 
 
 class KFold:
+    """K-Fold cross-validation iterator.
+
+    Provides train/test indices to split data in k folds. Each fold is then used once as a validation
+    while the k - 1 remaining folds form the training set.
+    """
+
     def __init__(self, n_splits=5, *, shuffle=False, random_state=None):
+        """Initialize K-Fold cross-validation.
+
+        Args:
+            n_splits: Number of folds. Must be at least 2.
+            shuffle: Whether to shuffle the data before splitting.
+            random_state: Controls the randomness of the fold generation.
+
+        """
         if not isinstance(n_splits, numbers.Integral):
             raise ValueError(
                 "The number of folds must be of Integral type. "
@@ -113,6 +161,21 @@ class KFold:
         self.random_state = random_state
 
     def split(self, X, y=None, groups=None):
+        """Generate indices to split data into training and test sets.
+
+        Args:
+            X: Array-like of shape (n_samples, n_features).
+            y: Array-like of shape (n_samples,).
+            groups: Array-like of shape (n_samples,).
+
+        Yields:
+            train: The training set indices for that split.
+            test: The testing set indices for that split.
+
+        Raises:
+            ValueError: If n_splits > n_samples.
+
+        """
         X, y, groups = indexable(X, y, groups)
         n_samples = _num_samples(X)
         if self.n_splits > n_samples:

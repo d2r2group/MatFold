@@ -1,6 +1,6 @@
-test.*
-MatFold/output/
-MatFold/test/
+src/MatFold/output/
+src/MatFold/test/
+test/output/
 .idea/
 # Byte-compiled / optimized / DLL files
 __pycache__/
