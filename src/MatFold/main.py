@@ -10,6 +10,7 @@ import inspect
 import itertools
 import json
 import os
+from types import FrameType
 
 import numpy as np
 import pandas as pd
@@ -385,67 +386,18 @@ class MatFold:
         :param verbose: Whether to print out details during code execution.
         :return: None
         """
-        frame = inspect.currentframe()
-        if frame is None:
-            raise RuntimeError("Could not get current frame")
-        keys, _, _, values = inspect.getargvalues(frame)
-        create_splits_serialized: dict = {}
-        for key in keys:
-            if key != "self":
-                create_splits_serialized[key] = values[key]
-        self.serialized["split_function_called"] = "create_splits"
-        self.serialized["split_parameters"] = create_splits_serialized
-
         if output_dir is None:
             output_dir = os.getcwd()
-
-        if (
-            fraction_upper_limit < 0.0
-            or fraction_upper_limit > 1.0
-            or fraction_lower_limit < 0.0
-            or fraction_lower_limit > 1.0
-        ):
-            raise ValueError(
-                "Error: `fraction_upper_limit` and `fraction_lower_limit` need to be "
-                "greater or equal to 0.0 and less or equal to 1.0",
-            )
-
-        if split_type not in [
-            "index",
-            "structureid",
-            "composition",
-            "chemsys",
-            "pointgroup",
-            "sgnum",
-            "crystalsys",
-            "elements",
-            "periodictablerows",
-            "periodictablegroups",
-        ]:
-            raise ValueError(
-                'Error: `split_type` must be either "index", "structureid", '
-                '"composition", "chemsys", "sgnum", "pointgroup", "crystalsys", '
-                '"elements", "periodictablerows", or "periodictablegroups"',
-            )
-
-        path_serialized = os.path.join(
-            output_dir,
-            write_base_str + f".{split_type}.json",
-        )
-        with open(path_serialized, "w") as f:
-            json.dump(self.serialized, f, indent=4)
-
+        
         if keep_n_elements_in_train is None:
             keep_n_elements_in_train = []
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
 
-        for n in keep_n_elements_in_train:
-            if n not in self.df["nelements"].tolist():
-                raise ValueError(
-                    f"Error: No structure exists in the dataset that contain {n} elements. "
-                    f"Adjust `keep_n_elements_in_train` accordingly.",
-                )
+        self._validate_inputs(fraction_upper_limit, fraction_lower_limit, split_type, keep_n_elements_in_train)
+
+        frame: FrameType | None = inspect.currentframe()
+        self._save_serialized(frame, os.path.join(output_dir, write_base_str + f".{split_type}.json"))
 
         default_train_indices = (
             list(self.df[self.df["nelements"].isin(keep_n_elements_in_train)].index)
@@ -774,55 +726,18 @@ class MatFold:
         :param verbose: Whether to print out details during code execution.
         :return: None
         """
-        frame = inspect.currentframe()
-        if frame is None:
-            raise RuntimeError("Could not get current frame")
-        keys, _, _, values = inspect.getargvalues(frame)
-        create_loo_splits_serialized: dict = {}
-        for key in keys:
-            if key != "self":
-                create_loo_splits_serialized[key] = values[key]
-        self.serialized["split_function_called"] = "create_loo_split"
-        self.serialized["split_parameters"] = create_loo_splits_serialized
-
         if output_dir is None:
             output_dir = os.getcwd()
-
-        if split_type not in [
-            "structureid",
-            "composition",
-            "chemsys",
-            "sgnum",
-            "pointgroup",
-            "crystalsys",
-            "elements",
-            "periodictablerows",
-            "periodictablegroups",
-        ]:
-            raise ValueError(
-                'Error: `split_type` must be either "structureid", '
-                '"composition", "chemsys", "sgnum", "pointgroup", "crystalsys", '
-                '"elements", "periodictablerows", or "periodictablegroups"',
-            )
-
-        path_serialized = os.path.join(
-            output_dir,
-            write_base_str + f".{split_type}.loo.{loo_label}.json",
-        )
-        with open(path_serialized, "w") as f:
-            json.dump(self.serialized, f, indent=4)
 
         if keep_n_elements_in_train is None:
             keep_n_elements_in_train = []
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
+        
+        self._validate_inputs(None, None, split_type, keep_n_elements_in_train)
 
-        for n in keep_n_elements_in_train:
-            if n not in self.df["nelements"].tolist():
-                raise ValueError(
-                    f"Error: No structure exists in the dataset that contain {n} elements. "
-                    f"Adjust `keep_n_elements_in_train` accordingly.",
-                )
+        frame: FrameType | None = inspect.currentframe()
+        self._save_serialized(frame, os.path.join(output_dir, write_base_str + f".{split_type}.loo.{loo_label}.json"))
 
         default_train_indices = (
             list(self.df[self.df["nelements"].isin(keep_n_elements_in_train)].index)
@@ -889,6 +804,65 @@ class MatFold:
                 f"{self.return_frac}.csv",
             ),
         )
+    
+    def _save_serialized(self, frame: FrameType | None, path_serialized: str | os.PathLike) -> None:
+        if frame is None:
+            raise RuntimeError("Could not get current frame")
+        keys, _, _, values = inspect.getargvalues(frame)
+        function_name = frame.f_code.co_name
+        create_splits_serialized: dict = {}
+        for key in keys:
+            if key != "self":
+                create_splits_serialized[key] = values[key]
+        self.serialized["split_function_called"] = function_name
+        self.serialized["split_parameters"] = create_splits_serialized
+
+        with open(path_serialized, "w") as f:
+            json.dump(self.serialized, f, indent=4)
+    
+    def _validate_inputs(
+        self,
+        fraction_upper_limit: float | None,
+        fraction_lower_limit: float | None,
+        split_type: str,
+        keep_n_elements_in_train: list[int],
+    ) -> None:
+        if fraction_upper_limit is not None and fraction_lower_limit is not None:
+            if (
+                fraction_upper_limit < 0.0
+                or fraction_upper_limit > 1.0
+                or fraction_lower_limit < 0.0
+                or fraction_lower_limit > 1.0
+            ):
+                raise ValueError(
+                    "Error: `fraction_upper_limit` and `fraction_lower_limit` need to be "
+                    "greater or equal to 0.0 and less or equal to 1.0",
+                )
+
+        if split_type not in [
+            "index",
+            "structureid",
+            "composition",
+            "chemsys",
+            "pointgroup",
+            "sgnum",
+            "crystalsys",
+            "elements",
+            "periodictablerows",
+            "periodictablegroups",
+        ]:
+            raise ValueError(
+                'Error: `split_type` must be either "index", "structureid", '
+                '"composition", "chemsys", "sgnum", "pointgroup", "crystalsys", '
+                '"elements", "periodictablerows", or "periodictablegroups"',
+            )
+
+        for n in keep_n_elements_in_train:
+            if n not in self.df["nelements"].tolist():
+                raise ValueError(
+                    f"Error: No structure exists in the dataset that contain {n} elements. "
+                    f"Adjust `keep_n_elements_in_train` accordingly.",
+                )
 
     @staticmethod
     def _check_split_indices_passed(
