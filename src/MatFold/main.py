@@ -342,7 +342,7 @@ class MatFold:
             statistics[uk] = n / len(self.df[split_type])
         return statistics
 
-    def create_splits(
+    def create_nested_splits(
         self,
         split_type: str,
         n_inner_splits: int = 10,
@@ -388,16 +388,23 @@ class MatFold:
         """
         if output_dir is None:
             output_dir = os.getcwd()
-        
+
         if keep_n_elements_in_train is None:
             keep_n_elements_in_train = []
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
 
-        self._validate_inputs(fraction_upper_limit, fraction_lower_limit, split_type, keep_n_elements_in_train)
+        self._validate_inputs(
+            fraction_upper_limit,
+            fraction_lower_limit,
+            split_type,
+            keep_n_elements_in_train,
+        )
 
         frame: FrameType | None = inspect.currentframe()
-        self._save_serialized(frame, os.path.join(output_dir, write_base_str + f".{split_type}.json"))
+        self._save_serialized(
+            frame, os.path.join(output_dir, write_base_str + f".{split_type}.json")
+        )
 
         default_train_indices = (
             list(self.df[self.df["nelements"].isin(keep_n_elements_in_train)].index)
@@ -700,6 +707,43 @@ class MatFold:
             ),
         )
 
+    def create_splits(
+        self,
+        split_type: str,
+        n_inner_splits: int = 10,
+        n_outer_splits: int = 10,
+        fraction_upper_limit: float = 1.0,
+        fraction_lower_limit: float = 0.0,
+        keep_n_elements_in_train: list | int | None = None,
+        min_train_test_factor: float | None = None,
+        inner_equals_outer_split_strategy: bool = True,
+        write_base_str: str = "mf",
+        output_dir: str | os.PathLike | None = None,
+        verbose: bool = False,
+    ) -> None:
+        """Deprecated. Use create_nested_splits instead."""
+        import warnings
+
+        warnings.warn(
+            "create_splits is deprecated and will be removed in a future version. "
+            "Use create_nested_splits instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.create_nested_splits(
+            split_type=split_type,
+            n_inner_splits=n_inner_splits,
+            n_outer_splits=n_outer_splits,
+            fraction_upper_limit=fraction_upper_limit,
+            fraction_lower_limit=fraction_lower_limit,
+            keep_n_elements_in_train=keep_n_elements_in_train,
+            min_train_test_factor=min_train_test_factor,
+            inner_equals_outer_split_strategy=inner_equals_outer_split_strategy,
+            write_base_str=write_base_str,
+            output_dir=output_dir,
+            verbose=verbose,
+        )
+
     def create_loo_split(
         self,
         split_type: str,
@@ -733,11 +777,16 @@ class MatFold:
             keep_n_elements_in_train = []
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
-        
+
         self._validate_inputs(None, None, split_type, keep_n_elements_in_train)
 
         frame: FrameType | None = inspect.currentframe()
-        self._save_serialized(frame, os.path.join(output_dir, write_base_str + f".{split_type}.loo.{loo_label}.json"))
+        self._save_serialized(
+            frame,
+            os.path.join(
+                output_dir, write_base_str + f".{split_type}.loo.{loo_label}.json"
+            ),
+        )
 
         default_train_indices = (
             list(self.df[self.df["nelements"].isin(keep_n_elements_in_train)].index)
@@ -804,8 +853,10 @@ class MatFold:
                 f"{self.return_frac}.csv",
             ),
         )
-    
-    def _save_serialized(self, frame: FrameType | None, path_serialized: str | os.PathLike) -> None:
+
+    def _save_serialized(
+        self, frame: FrameType | None, path_serialized: str | os.PathLike
+    ) -> None:
         if frame is None:
             raise RuntimeError("Could not get current frame")
         keys, _, _, values = inspect.getargvalues(frame)
@@ -819,7 +870,7 @@ class MatFold:
 
         with open(path_serialized, "w") as f:
             json.dump(self.serialized, f, indent=4)
-    
+
     def _validate_inputs(
         self,
         fraction_upper_limit: float | None,
