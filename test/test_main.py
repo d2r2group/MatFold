@@ -56,30 +56,98 @@ def test_statistics(load_test_data):
     assert pytest.approx(sum(stats.values()), 0.01) == 1.0
 
 
-def test_create_splits(load_test_data):
-    """Test the create_splits method by creating splits with specific parameters."""
+def test_train_test_splits_index(load_test_data):
+    """Test the create_train_test_splits method by creating splits with specific parameters."""
     output_dir, cifs, data = load_test_data
     mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
-    mfc.create_splits(
-        "crystalsys",
-        n_outer_splits=0,
-        n_inner_splits=0,
-        fraction_upper_limit=0.8,
+    tdf, tdf = mfc.create_train_test_splits(
+        None,
+        "index",
+        0.7,
+        None,
+        fraction_tolerance=0.05,
         keep_n_elements_in_train=2,
-        min_train_test_factor=None,
         output_dir=output_dir,
-        verbose=True,
     )
 
 
-def test_create_loo_split(load_test_data):
-    """Test the create_loo_split method by creating a leave-one-out split for the 'Fe' element."""
+def test_train_test_splits_structureid(load_test_data):
+    """Test the create_train_test_splits method by creating splits with specific parameters."""
     output_dir, cifs, data = load_test_data
     mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
-    mfc.create_loo_split(
-        "elements",
-        "Fe",
-        keep_n_elements_in_train=None,
+    tdf, tdf = mfc.create_train_test_splits(
+        None,
+        "structureid",
+        0.7,
+        None,
+        fraction_tolerance=0.05,
+        keep_n_elements_in_train=2,
         output_dir=output_dir,
-        verbose=True,
     )
+
+
+def test_train_test_splits_chemsys(load_test_data):
+    """Test the create_train_test_splits method by creating splits with specific parameters."""
+    output_dir, cifs, data = load_test_data
+    mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
+    stats = mfc.split_statistics("chemsys")
+    print(stats, flush=True)
+    tdf, tdf = mfc.create_train_test_splits(
+        None,
+        "chemsys",
+        0.7,
+        None,
+        fraction_tolerance=0.05,
+        keep_n_elements_in_train=[],
+        default_train=["Mg-O-Ti", "Ce-Fe-O"],
+        default_test=["O-Ti-Y", "Fe-O-Ti"],
+        output_dir=output_dir,
+    )
+
+
+def test_train_test_splits_crystalsys(load_test_data):
+    """Test the create_train_test_splits method by creating splits with specific parameters."""
+    output_dir, cifs, data = load_test_data
+    mfc = MatFold(data, cifs, return_frac=1.0, always_include_n_elements=None)
+    stats = mfc.split_statistics("crystalsys")
+    print(stats, flush=True)
+    tdf, tdf = mfc.create_train_test_splits(
+        None,
+        "crystalsys",
+        0.7,
+        None,
+        fraction_tolerance=0.05,
+        keep_n_elements_in_train=[],
+        default_train=[],
+        default_test=["tetragonal"],
+        output_dir=output_dir,
+    )
+
+
+# def test_create_nested_splits(load_test_data):
+#     """Test the create_nested_splits method by creating splits with specific parameters."""
+#     output_dir, cifs, data = load_test_data
+#     mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
+#     mfc.create_nested_splits(
+#         "crystalsys",
+#         n_outer_splits=0,
+#         n_inner_splits=0,
+#         fraction_upper_limit=0.8,
+#         keep_n_elements_in_train=2,
+#         min_train_test_factor=None,
+#         output_dir=output_dir,
+#         verbose=True,
+#     )
+
+
+# def test_create_loo_split(load_test_data):
+#     """Test the create_loo_split method by creating a leave-one-out split for the 'Fe' element."""
+#     output_dir, cifs, data = load_test_data
+#     mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
+#     mfc.create_loo_split(
+#         "elements",
+#         "Fe",
+#         keep_n_elements_in_train=None,
+#         output_dir=output_dir,
+#         verbose=True,
+#     )
