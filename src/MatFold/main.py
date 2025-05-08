@@ -4,7 +4,6 @@ This module provides functionality for creating standardized chemical cross-vali
 and analyzing model performance across different materials categories.
 """
 
-import collections
 import hashlib
 import inspect
 import itertools
@@ -19,7 +18,8 @@ from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from ._version import __version__
-from .utils import KFold
+from .utils import KFold, _check_split_dfs, _save_split_dfs, _validate_train_test_fractions, \
+    _validate_inputs, _check_split_indices_passed
 
 
 def cifs_to_dict(directory: str | os.PathLike) -> dict:
@@ -375,21 +375,17 @@ class MatFold:
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
 
-        self._validate_inputs(
+        _validate_inputs(
+            df,
             None,
             None,
             split_type,
             keep_n_elements_in_train,
         )
 
-        trainf, testf = self._validate_train_test_fractions(
+        trainf, testf = _validate_train_test_fractions(
             train_fraction, test_fraction
         )
-
-        # frame: FrameType | None = inspect.currentframe()
-        # self._save_serialized(
-        #     frame, os.path.join(output_dir, write_base_str + f".{split_type}.json")
-        # )
 
         default_train_indices_nelements = (
             list(df[self.df["nelements"].isin(keep_n_elements_in_train)].index)
@@ -413,7 +409,8 @@ class MatFold:
             set(default_train_indices_nelements + default_train_indices_splits)
         )
 
-        split_possibilities_all = self._get_unique_split_possibilities(
+        split_possibilities_all = _get_unique_split_possibilities(
+            self.df,
             keep_n_elements_in_train,
             split_type,
         )
@@ -499,7 +496,8 @@ class MatFold:
                     f"of {trainf} is reached within tolerance {fraction_tolerance}."
                 )
 
-        train_indices, test_indices = self._get_split_indices(
+        train_indices, test_indices = _get_split_indices(
+            self.df,
             train_set,
             test_set,
             default_train_indices,
@@ -522,18 +520,16 @@ class MatFold:
                 f"(len={len(test_indices + default_test_indices)}) set is empty and split cannot be created.",
             )
 
-        # path = os.path.join(
-        #     output_dir,
-        #     write_base_str + f".{split_type}.csv",
-        # )
-        train_df, test_df = self._save_split_dfs(
+        train_df, test_df = _save_split_dfs(
+            self.df,
             train_indices,
             test_indices,
             default_train_indices,
             default_test_indices,
+            self.cols_to_keep,
             None,
         )
-        self._check_split_dfs([train_df, test_df], verbose=verbose)
+        _check_split_dfs(self.df, [train_df, test_df], verbose=verbose)
         print(f"{len(train_df)/len(self.df)=:.3f}, {len(test_df)/len(self.df)=:.3f}")
         return train_df, test_df
 
@@ -591,7 +587,8 @@ class MatFold:
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
 
-        self._validate_inputs(
+        _validate_inputs(
+            self.df,
             fraction_upper_limit,
             fraction_lower_limit,
             split_type,
@@ -608,7 +605,8 @@ class MatFold:
             if len(keep_n_elements_in_train) > 0
             else []
         )
-        split_possibilities = self._get_unique_split_possibilities(
+        split_possibilities = _get_unique_split_possibilities(
+            self.df,
             keep_n_elements_in_train,
             split_type,
         )
@@ -700,14 +698,16 @@ class MatFold:
                 print(outer_train_set)
                 print(outer_test_set)
 
-            outer_train_indices, outer_test_indices = self._get_split_indices(
+            outer_train_indices, outer_test_indices = _get_split_indices(
+                self.df,
                 outer_train_set,
                 outer_test_set,
                 default_train_indices,
+                [],
                 split_type,
             )
 
-            if not self._check_split_indices_passed(
+            if not _check_split_indices_passed(
                 outer_train_indices + default_train_indices,
                 outer_test_indices,
                 min_train_test_factor,
@@ -728,14 +728,16 @@ class MatFold:
                 write_base_str + f".{split_type}.k{i}_outer.csv",
             )
 
-            outer_train_df, outer_test_df = self._save_split_dfs(
+            outer_train_df, outer_test_df = _save_split_dfs(
+                self.df,
                 outer_train_indices,
                 outer_test_indices,
                 default_train_indices,
                 [],
+                self.cols_to_keep,
                 path_outer,
             )
-            self._check_split_dfs([outer_train_df, outer_test_df], verbose=verbose)
+            _check_split_dfs(self.df, [outer_train_df, outer_test_df], verbose=verbose)
 
             summary_outer_splits.loc[len(summary_outer_splits.index) + 1, :] = [
                 i,
@@ -803,7 +805,8 @@ class MatFold:
                         print(inner_train_set)
                         print(inner_test_set)
 
-                    inner_train_indices, inner_test_indices = self._get_split_indices(
+                    inner_train_indices, inner_test_indices = _get_split_indices(
+                        self.df,
                         inner_train_set,
                         inner_test_set,
                         default_train_indices,
@@ -817,7 +820,7 @@ class MatFold:
                         if ind not in outer_test_indices
                     ]
 
-                    if not self._check_split_indices_passed(
+                    if not _check_split_indices_passed(
                         inner_train_indices + default_train_indices,
                         inner_test_indices,
                         min_train_test_factor,
@@ -841,14 +844,17 @@ class MatFold:
                         write_base_str + f".{split_type}.k{i}_outer.l{j}_inner.csv",
                     )
 
-                    inner_train_df, inner_test_df = self._save_split_dfs(
+                    inner_train_df, inner_test_df = _save_split_dfs(
+                        self.df,
                         inner_train_indices,
                         inner_test_indices,
                         default_train_indices,
                         [],
+                        self.cols_to_keep,
                         path_inner,
                     )
-                    self._check_split_dfs(
+                    _check_split_dfs(
+                        self.df,
                         [outer_test_df, inner_train_df, inner_test_df],
                         verbose=verbose,
                     )
@@ -887,14 +893,17 @@ class MatFold:
                         write_base_str + f".{split_type}.k{i}_outer.l{j}_inner.csv",
                     )
 
-                    inner_train_df, inner_test_df = self._save_split_dfs(
+                    inner_train_df, inner_test_df = _save_split_dfs(
+                        self.df,
                         final_inner_train_indices,
                         final_inner_test_indices,
                         [],
                         [],
+                        self.cols_to_keep,
                         path_inner,
                     )
-                    self._check_split_dfs(
+                    _check_split_dfs(
+                        self.df,
                         [outer_test_df, inner_train_df, inner_test_df],
                         verbose=verbose,
                     )
@@ -981,7 +990,7 @@ class MatFold:
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
 
-        self._validate_inputs(None, None, split_type, keep_n_elements_in_train)
+        _validate_inputs(self.df, None, None, split_type, keep_n_elements_in_train)
 
         frame: FrameType | None = inspect.currentframe()
         self._save_serialized(
@@ -996,7 +1005,8 @@ class MatFold:
             if len(keep_n_elements_in_train) > 0
             else []
         )
-        split_possibilities = self._get_unique_split_possibilities(
+        split_possibilities = _get_unique_split_possibilities(
+            self.df,
             keep_n_elements_in_train,
             split_type,
         )
@@ -1013,7 +1023,8 @@ class MatFold:
         train_set = [sp for sp in split_possibilities if sp != loo_label]
         test_set = [loo_label]
 
-        train_indices, test_indices = self._get_split_indices(
+        train_indices, test_indices = _get_split_indices(
+            self.df,
             train_set,
             test_set,
             default_train_indices,
@@ -1031,14 +1042,16 @@ class MatFold:
             output_dir,
             write_base_str + f".{split_type}.loo.{loo_label.replace('/', '_')}.csv",
         )
-        train_df, test_df = self._save_split_dfs(
+        train_df, test_df = _save_split_dfs(
+            self.df,
             train_indices,
             test_indices,
             default_train_indices,
             [],
+            self.cols_to_keep,
             path_outer,
         )
-        self._check_split_dfs([train_df, test_df], verbose=verbose)
+        _check_split_dfs(self.df, [train_df, test_df], verbose=verbose)
 
         summary_loo_split.loc[len(summary_loo_split.index) + 1, :] = [
             0,
@@ -1076,296 +1089,104 @@ class MatFold:
         with open(path_serialized, "w") as f:
             json.dump(self.serialized, f, indent=4)
 
-    @staticmethod
-    def _validate_train_test_fractions(
-        train_fraction: float | None,
-        test_fraction: float | None,
-    ) -> tuple[float, float]:
-        if train_fraction is None and test_fraction is None:
-            raise ValueError(
-                "Error: Either `train_fraction` or `test_fraction` (or both) need to be defined."
-            )
-        elif train_fraction is None and test_fraction is not None:
-            train_fraction = 1.0 - test_fraction
-        elif train_fraction is not None and test_fraction is None:
-            test_fraction = 1.0 - train_fraction
-        assert train_fraction is not None and test_fraction is not None
+def _get_unique_split_possibilities(
+    df: pd.DataFrame,
+    keep_n_elements_in_train: list,
+    split_type: str,
+) -> list:
+    """Determines the list of possible unique split labels for the given `split_type`.
 
-        if (
-            train_fraction < 0.0
-            or train_fraction > 1.0
-            or test_fraction < 0.0
-            or test_fraction > 1.0
-        ):
-            raise ValueError(
-                "Error: `train_fraction` and `test_fraction` need to be "
-                "greater or equal to 0.0 and less or equal to 1.0",
-            )
-        if not np.isclose(train_fraction + test_fraction, 1.0):
-            raise ValueError(
-                "Error: `train_fraction` plus `test_fraction` need to be equal to 1.0."
-            )
-        return train_fraction, test_fraction
+    If a specific split possibility contains *only* entries that are part of `keep_n_elements_in_train`,
+    then this function will not return it as a split possibility.
 
-    def _validate_inputs(
-        self,
-        fraction_upper_limit: float | None,
-        fraction_lower_limit: float | None,
-        split_type: str,
-        keep_n_elements_in_train: list[int],
-    ) -> None:
-        if fraction_upper_limit is not None and fraction_lower_limit is not None:
-            if (
-                fraction_upper_limit < 0.0
-                or fraction_upper_limit > 1.0
-                or fraction_lower_limit < 0.0
-                or fraction_lower_limit > 1.0
-            ):
-                raise ValueError(
-                    "Error: `fraction_upper_limit` and `fraction_lower_limit` need to be "
-                    "greater or equal to 0.0 and less or equal to 1.0",
-                )
-
-        if split_type not in [
-            "index",
-            "structureid",
-            "composition",
-            "chemsys",
-            "pointgroup",
-            "sgnum",
-            "crystalsys",
-            "elements",
-            "periodictablerows",
-            "periodictablegroups",
-        ]:
-            raise ValueError(
-                'Error: `split_type` must be either "index", "structureid", '
-                '"composition", "chemsys", "sgnum", "pointgroup", "crystalsys", '
-                '"elements", "periodictablerows", or "periodictablegroups"',
-            )
-
-        for n in keep_n_elements_in_train:
-            if n not in self.df["nelements"].tolist():
-                raise ValueError(
-                    f"Error: No structure exists in the dataset that contain {n} elements. "
-                    f"Adjust `keep_n_elements_in_train` accordingly.",
-                )
-
-    @staticmethod
-    def _check_split_indices_passed(
-        train_indices: list[int],
-        test_indices: list[int],
-        min_train_test_factor: float | None,
-    ) -> bool:
-        """Check if the lists of train and test indices have no intersection and are non-zero in length.
-
-        :param train_indices: List of train indices.
-        :param test_indices: List of test indices.
-        :param min_train_test_factor: Minimum factor that the training set needs to be
-        larger (for factors greater than 1.0) than the test set.
-        :return: Returns false if any of the lists is of length zero, true otherwise.
-        """
-        if len(set(train_indices).intersection(set(test_indices))) != 0:
-            raise Exception(
-                f"Error: Training and test indices are not mutually exclusive "
-                f"({len(set(train_indices).intersection(set()))} indices in common).",
-            )
-        if min_train_test_factor is not None:
-            if len(train_indices) < len(test_indices) * min_train_test_factor:
-                print(
-                    f"Warning! Train set size ({len(train_indices)}) is smaller than "
-                    f"test set size times min_train_test_factor ({len(test_indices)} * {min_train_test_factor} = "
-                    f"{int(round(len(test_indices) * min_train_test_factor, 0))}).",
-                    flush=True,
-                )
-                return False
-        if len(train_indices) == 0 or len(test_indices) == 0:
-            print(
-                f"Warning! Either train (len={len(train_indices)}) or test "
-                f"(len={len(test_indices)}) set is empty and split cannot be created.",
-                flush=True,
-            )
-            return False
-        return True
-
-    def _check_split_dfs(
-        self,
-        df_list: list[pd.DataFrame],
-        verbose: bool = True,
-    ) -> None:
-        """Check that there are no duplicates in dfs in `df_list` and that the number of indices in `self.df` is the same
-        as in the combined dfs in `df_list`
-
-        :param df_list: List of sub dataframes
-        :param verbose: Whether to print out the lengths of the `df_list` dfs
-        :return: None
-        """
-        indices_list = [list(df.index) for df in df_list]
-        sizes_list = [len(lst) for lst in indices_list]
-
-        if verbose:
-            print(
-                f"Individual lengths of indices lists = {'+'.join([str(s) for s in sizes_list])} = {sum(sizes_list)}."
-                f" Original total length of dataframe indices = {len(self.df)}",
-            )
-
-        # counts the number of duplicate indices for each individual df
-        duplicates = [
-            len([item for item, count in collections.Counter(lst).items() if count > 1])
-            for lst in indices_list
-        ]
-        if np.sum(duplicates) != 0:
-            raise Exception(
-                "Error: Duplicate indices detected within individual dfs: ",
-                duplicates,
-            )
-
-        if sum(sizes_list) != len(self.df):
-            raise Exception(
-                f"Error: Non-equal num of indices in splits {sum(sizes_list)} vs. original {len(self.df)}.",
-            )
-
-    def _save_split_dfs(
-        self,
-        train_indices: list | np.typing.NDArray,
-        test_indices: list | np.typing.NDArray,
-        default_train_indices: list | np.typing.NDArray,
-        default_test_indices: list | np.typing.NDArray,
-        path: str | os.PathLike | None,
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """Create train and test dfs and saves them as csv files (if path is specified).
-
-        Note that the path needs to end with `.csv` and the output file endings will be changed to
-        `<>.train.csv` and `<>.test.csv`
-
-        :param train_indices: List of train indices
-        :param test_indices: List of test indices
-        :param default_train_indices: List of indices that are part of the training set by default
-        :param default_test_indices: List of indices that are part of the test set by default
-        :param path: Path for the output files. Must end with `.csv`. If no path is specified then no files will be saved.
-        :return: Tuple of train and test dataframes
-        """
-        test_df = self.df.loc[test_indices + default_test_indices, :].copy()
-        train_df = self.df.loc[train_indices + default_train_indices, :].copy()
-        if path is not None:
-            train_df.loc[:, self.cols_to_keep].to_csv(
-                str(path).replace(".csv", ".train.csv"),
-                header=True,
-                index=False,
-            )
-            test_df.loc[:, self.cols_to_keep].to_csv(
-                str(path).replace(".csv", ".test.csv"),
-                header=True,
-                index=False,
-            )
-        return train_df, test_df
-
-    def _get_split_indices(
-        self,
-        train_set: list | set,
-        test_set: list | set,
-        default_train_indices: list | None,
-        default_test_indices: list | None,
-        split_type: str,
-    ) -> tuple[list, list]:
-        """Determine the split indices based in the specified `split_type` and train and test sets.
-
-        The returned split indices do not include `default_train_indices`
-        (they are added manually later in `_save_split_dfs`).
-
-        :param train_set: Training set options (e.g., list of spacegroups in the training set)
-        :param test_set: Test set options
-        :param default_train_indices: List of indices that are part of the training set by default
-        :param default_test_indices: List of indices that are part of the test set by default
-        :param split_type: String specifying the splitting type
-        :return: Tuple of train and test indices lists
-        """
-        if default_train_indices is None:
-            default_train_indices = []
-        if default_test_indices is None:
-            default_test_indices = []
-        if split_type not in ["elements", "periodictablerows", "periodictablegroups"]:
-            # indices of all examples for outer train fold (less any specified by default_train_indices/default_test_indices)
-            train_indices = list(
-                set(self.df[self.df[split_type].isin(train_set)].index)
-                - set(default_train_indices + default_test_indices),
-            )
-            # indices of all examples for outer test fold (less any specified by default_train_indices/default_test_indices)
-            test_indices = list(
-                set(self.df[self.df[split_type].isin(test_set)].index)
-                - set(default_train_indices + default_test_indices),
-            )
-        else:
-            # Indices of all examples whose structures contain only train elements
-            train_indices = list(
-                set(
-                    self.df[
-                        self.df.apply(
-                            lambda x: all(e in train_set for e in x[split_type]),
-                            # check that all elements are in the training set options, if any is not,
-                            # then it won't be part of final training set indices
-                            axis=1,
-                        )
-                    ].index,
-                )
-                - set(default_train_indices + default_test_indices),
-            )
-
-            # indices of all examples whose structures contain a test element
-            test_indices = list(
-                set(
-                    self.df[
-                        self.df.apply(
-                            lambda x: any(e in test_set for e in x[split_type]),
-                            axis=1,
-                        )
-                    ].index,
-                )
-                - set(default_train_indices + default_test_indices),
-            )
-        return train_indices, test_indices
-
-    def _get_unique_split_possibilities(
-        self,
-        keep_n_elements_in_train: list,
-        split_type: str,
-    ) -> list:
-        """Determines the list of possible unique split labels for the given `split_type`.
-
-        If a specific split possiblity contains *only* entries that are part of `keep_n_elements_in_train`,
-        then this function will not return it as a split possiblity.
-
-        :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
-        in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
-        :param split_type: String specifying the splitting type
-        :return: List of unique split labels
-        """
-        if len(keep_n_elements_in_train) > 0:
-            if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
-                split_possibilities = sorted(
-                    {
-                        item
-                        for sublist in self.df[
-                            ~self.df["nelements"].isin(keep_n_elements_in_train)
-                        ][split_type]
-                        for item in sublist
-                    }
-                )
-            else:
-                split_possibilities = sorted(
-                    set(
-                        self.df[~self.df["nelements"].isin(keep_n_elements_in_train)][
-                            split_type
-                        ]
-                    )
-                )
-        elif split_type in ["elements", "periodictablerows", "periodictablegroups"]:
+    :param df: DataFrame containing the dataset.
+    :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
+    in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
+    :param split_type: String specifying the splitting type
+    :return: List of unique split labels
+    """
+    if len(keep_n_elements_in_train) > 0:
+        if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
             split_possibilities = sorted(
-                {item for sublist in self.df[split_type] for item in sublist}
+                {
+                    item
+                    for sublist in df[~df["nelements"].isin(keep_n_elements_in_train)][split_type]
+                    for item in sublist
+                }
             )
         else:
-            split_possibilities = sorted(set(self.df[split_type]))
-        return split_possibilities
+            split_possibilities = sorted(
+                set(
+                    df[~df["nelements"].isin(keep_n_elements_in_train)][split_type]
+                )
+            )
+    elif split_type in ["elements", "periodictablerows", "periodictablegroups"]:
+        split_possibilities = sorted(
+            {item for sublist in df[split_type] for item in sublist}
+        )
+    else:
+        split_possibilities = sorted(set(df[split_type]))
+    return split_possibilities
+
+def _get_split_indices(
+    df: pd.DataFrame,
+    train_set: list | set,
+    test_set: list | set,
+    default_train_indices: list | None,
+    default_test_indices: list | None,
+    split_type: str,
+) -> tuple[list, list]:
+    """Determine the split indices based in the specified `split_type` and train and test sets.
+
+    The returned split indices do not include `default_train_indices`
+    (they are added manually later in `_save_split_dfs`).
+
+    :param df: DataFrame containing the dataset.
+    :param train_set: Training set options (e.g., list of spacegroups in the training set).
+    :param test_set: Test set options.
+    :param default_train_indices: List of indices that are part of the training set by default.
+    :param default_test_indices: List of indices that are part of the test set by default.
+    :param split_type: String specifying the splitting type.
+    :return: Tuple of train and test indices lists.
+    """
+    if default_train_indices is None:
+        default_train_indices = []
+    if default_test_indices is None:
+        default_test_indices = []
+    if split_type not in ["elements", "periodictablerows", "periodictablegroups"]:
+        train_indices = list(
+            set(df[df[split_type].isin(train_set)].index)
+            - set(default_train_indices + default_test_indices),
+        )
+        test_indices = list(
+            set(df[df[split_type].isin(test_set)].index)
+            - set(default_train_indices + default_test_indices),
+        )
+    else:
+        train_indices = list(
+            set(
+                df[
+                    df.apply(
+                        lambda x: all(e in train_set for e in x[split_type]),
+                        axis=1,
+                    )
+                ].index,
+            )
+            - set(default_train_indices + default_test_indices),
+        )
+
+        test_indices = list(
+            set(
+                df[
+                    df.apply(
+                        lambda x: any(e in test_set for e in x[split_type]),
+                        axis=1,
+                    )
+                ].index,
+            )
+            - set(default_train_indices + default_test_indices),
+        )
+    return train_indices, test_indices
 
 
 if __name__ == "__main__":

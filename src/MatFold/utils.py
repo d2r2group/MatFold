@@ -1,4 +1,7 @@
-"""A minimal reproduction of the `KFold` class from scikit-learn to remove package dependency.
+"""Utility functions for MatFold class that verify input parameters and split indices.
+
+Further contains a minimal reproduction of the `KFold` class from scikit-learn to 
+remove package dependency.
 
 BSD 3-Clause License
 
@@ -8,6 +11,8 @@ All rights reserved.
 """
 
 import numbers
+import collections
+import os
 
 import numpy as np
 import pandas as pd
@@ -212,3 +217,212 @@ class KFold:
             start, stop = current, current + fold_size
             yield indices[start:stop]
             current = stop
+
+def _check_split_dfs(
+    df: pd.DataFrame,
+    df_list: list[pd.DataFrame],
+    verbose: bool = True,
+) -> None:
+    """Check that there are no duplicates in dfs in `df_list` and that the number of indices in `df` is the same
+    as in the combined dfs in `df_list`
+
+    :param df: DataFrame containing the dataset.
+    :param df_list: List of sub dataframes.
+    :param verbose: Whether to print out the lengths of the `df_list` dfs.
+    :return: None.
+    """
+    indices_list = [list(sub_df.index) for sub_df in df_list]
+    sizes_list = [len(lst) for lst in indices_list]
+
+    if verbose:
+        print(
+            f"Individual lengths of indices lists = {'+'.join([str(s) for s in sizes_list])} = {sum(sizes_list)}."
+            f" Original total length of dataframe indices = {len(df)}",
+        )
+
+    duplicates = [
+        len([item for item, count in collections.Counter(lst).items() if count > 1])
+        for lst in indices_list
+    ]
+    if np.sum(duplicates) != 0:
+        raise Exception(
+            "Error: Duplicate indices detected within individual dfs: ",
+            duplicates,
+        )
+
+    if sum(sizes_list) != len(df):
+        raise Exception(
+            f"Error: Non-equal num of indices in splits {sum(sizes_list)} vs. original {len(df)}.",
+        )
+
+
+def _save_split_dfs(
+    df: pd.DataFrame,
+    train_indices: list | np.typing.NDArray,
+    test_indices: list | np.typing.NDArray,
+    default_train_indices: list | np.typing.NDArray,
+    default_test_indices: list | np.typing.NDArray,
+    cols_to_keep: list,
+    path: str | os.PathLike | None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Create train and test dfs and saves them as csv files (if path is specified).
+
+    Note that the path needs to end with `.csv` and the output file endings will be changed to
+    `<>.train.csv` and `<>.test.csv`
+
+    :param df: DataFrame containing the dataset.
+    :param train_indices: List of train indices.
+    :param test_indices: List of test indices.
+    :param default_train_indices: List of indices that are part of the training set by default.
+    :param default_test_indices: List of indices that are part of the test set by default.
+    :param cols_to_keep: List of columns to keep in the splits.
+    :param path: Path for the output files. Must end with `.csv`. If no path is specified then no files will be saved.
+    :return: Tuple of train and test dataframes.
+    """
+    test_df = df.loc[test_indices + default_test_indices, :].copy()
+    train_df = df.loc[train_indices + default_train_indices, :].copy()
+    if path is not None:
+        train_df.loc[:, cols_to_keep].to_csv(
+            str(path).replace(".csv", ".train.csv"),
+            header=True,
+            index=False,
+        )
+        test_df.loc[:, cols_to_keep].to_csv(
+            str(path).replace(".csv", ".test.csv"),
+            header=True,
+            index=False,
+        )
+    return train_df, test_df
+
+def _validate_train_test_fractions(
+    train_fraction: float | None,
+    test_fraction: float | None,
+) -> tuple[float, float]:
+    """Validate train and test fractions and complete them.
+
+    :param train_fraction: Fraction of data for training.
+    :param test_fraction: Fraction of data for testing.
+    :return: Tuple of validated/completed train and test fractions.
+    """
+    if train_fraction is None and test_fraction is None:
+        raise ValueError(
+            "Error: Either `train_fraction` or `test_fraction` (or both) need to be defined."
+        )
+    elif train_fraction is None and test_fraction is not None:
+        train_fraction = 1.0 - test_fraction
+    elif train_fraction is not None and test_fraction is None:
+        test_fraction = 1.0 - train_fraction
+    assert train_fraction is not None and test_fraction is not None
+    if (
+        train_fraction < 0.0
+        or train_fraction > 1.0
+        or test_fraction < 0.0
+        or test_fraction > 1.0
+    ):
+        raise ValueError(
+            "Error: `train_fraction` and `test_fraction` need to be "
+            "greater or equal to 0.0 and less or equal to 1.0",
+        )
+    if not np.isclose(train_fraction + test_fraction, 1.0):
+        raise ValueError(
+            "Error: `train_fraction` plus `test_fraction` need to be equal to 1.0."
+        )
+    return train_fraction, test_fraction
+
+
+def _validate_inputs(
+    df: pd.DataFrame,
+    fraction_upper_limit: float | None,
+    fraction_lower_limit: float | None,
+    split_type: str,
+    keep_n_elements_in_train: list[int],
+) -> None:
+    """Validate input parameters for nested and LOO splitting.
+
+    :param df: DataFrame containing the dataset.
+    :param fraction_upper_limit: If a split possiblity is represented in the dataset with a fraction above
+    this limit then the corresponding indices will be forced to be in the training set by default.
+    :param fraction_lower_limit: If a split possiblity is represented in the dataset with a fraction below
+    this limit then the corresponding indices will be forced to be in the training set by default.
+    :param split_type: Defines the type of splitting, must be either "index", "structureid", "composition",
+    "chemsys", "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups"
+    :param n_inner_splits: Number of inner splits (for nested k-fold); if set to 0, then `n_inner_splits` is set
+    equal to the number of inner test possiblities (i.e., each inner test set holds one possibility out
+    for all possible options)
+    :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
+    in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
+    
+    :return: None.
+    """
+    if fraction_upper_limit is not None and fraction_lower_limit is not None:
+        if (
+            fraction_upper_limit < 0.0
+            or fraction_upper_limit > 1.0
+            or fraction_lower_limit < 0.0
+            or fraction_lower_limit > 1.0
+        ):
+            raise ValueError(
+                "Error: `fraction_upper_limit` and `fraction_lower_limit` need to be "
+                "greater or equal to 0.0 and less or equal to 1.0",
+            )
+
+    if split_type not in [
+        "index",
+        "structureid",
+        "composition",
+        "chemsys",
+        "pointgroup",
+        "sgnum",
+        "crystalsys",
+        "elements",
+        "periodictablerows",
+        "periodictablegroups",
+    ]:
+        raise ValueError(
+            'Error: `split_type` must be either "index", "structureid", '
+            '"composition", "chemsys", "sgnum", "pointgroup", "crystalsys", '
+            '"elements", "periodictablerows", or "periodictablegroups"',
+        )
+
+    for n in keep_n_elements_in_train:
+        if n not in df["nelements"].tolist():
+            raise ValueError(
+                f"Error: No structure exists in the dataset that contain {n} elements. "
+                f"Adjust `keep_n_elements_in_train` accordingly.",
+            )
+
+
+def _check_split_indices_passed(
+    train_indices: list[int],
+    test_indices: list[int],
+    min_train_test_factor: float | None,
+) -> bool:
+    """Check if train and test indices are valid.
+
+    :param train_indices: List of train indices.
+    :param test_indices: List of test indices.
+    :param min_train_test_factor: Minimum factor for train/test size ratio.
+    :return: True if valid, False otherwise.
+    """
+    if len(set(train_indices).intersection(set(test_indices))) != 0:
+        raise Exception(
+            f"Error: Training and test indices are not mutually exclusive "
+            f"({len(set(train_indices).intersection(set()))} indices in common).",
+        )
+    if min_train_test_factor is not None:
+        if len(train_indices) < len(test_indices) * min_train_test_factor:
+            print(
+                f"Warning! Train set size ({len(train_indices)}) is smaller than "
+                f"test set size times min_train_test_factor ({len(test_indices)} * {min_train_test_factor} = "
+                f"{int(round(len(test_indices) * min_train_test_factor, 0))}).",
+                flush=True,
+            )
+            return False
+    if len(train_indices) == 0 or len(test_indices) == 0:
+        print(
+            f"Warning! Either train (len={len(train_indices)}) or test "
+            f"(len={len(test_indices)}) set is empty and split cannot be created.",
+            flush=True,
+        )
+        return False
+    return True
