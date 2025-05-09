@@ -294,40 +294,46 @@ def _save_split_dfs(
         )
     return train_df, test_df
 
-def _validate_train_test_fractions(
+def _validate_train_validation_test_fractions(
     train_fraction: float | None,
+    validation_fraction: float | None,
     test_fraction: float | None,
-) -> tuple[float, float]:
+) -> tuple[float, float, float]:
     """Validate train and test fractions and complete them.
 
     :param train_fraction: Fraction of data for training.
+    :param validation_fraction: Fraction of data for validation.
     :param test_fraction: Fraction of data for testing.
     :return: Tuple of validated/completed train and test fractions.
     """
-    if train_fraction is None and test_fraction is None:
+    if test_fraction is None:
         raise ValueError(
-            "Error: Either `train_fraction` or `test_fraction` (or both) need to be defined."
+            "Error: `test_fraction` needs to be defined."
         )
-    elif train_fraction is None and test_fraction is not None:
-        train_fraction = 1.0 - test_fraction
-    elif train_fraction is not None and test_fraction is None:
-        test_fraction = 1.0 - train_fraction
-    assert train_fraction is not None and test_fraction is not None
+    if validation_fraction is None and train_fraction is None:
+        validation_fraction = 0.0
+        train_fraction = 1.0 - test_fraction - validation_fraction
+    elif validation_fraction is None and train_fraction is not None:
+        validation_fraction = 1.0 - test_fraction - train_fraction
+    assert train_fraction is not None and validation_fraction is not None and test_fraction is not None
     if (
-        train_fraction < 0.0
-        or train_fraction > 1.0
-        or test_fraction < 0.0
-        or test_fraction > 1.0
+        train_fraction <= 0.0
+        or train_fraction >= 1.0
+        or validation_fraction < 0.0
+        or validation_fraction > 1.0
+        or test_fraction <= 0.0
+        or test_fraction >= 1.0
     ):
         raise ValueError(
             "Error: `train_fraction` and `test_fraction` need to be "
-            "greater or equal to 0.0 and less or equal to 1.0",
+            "greater than 0.0 and less than 1.0. `validation_fraction` needs to be "
+            "greater than or equal to 0.0 and less than or equal to 1.0.",
         )
-    if not np.isclose(train_fraction + test_fraction, 1.0):
+    if not np.isclose(train_fraction + validation_fraction + test_fraction, 1.0):
         raise ValueError(
             "Error: `train_fraction` plus `test_fraction` need to be equal to 1.0."
         )
-    return train_fraction, test_fraction
+    return train_fraction, validation_fraction, test_fraction
 
 
 def _validate_inputs(

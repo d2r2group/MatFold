@@ -18,7 +18,7 @@ from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from ._version import __version__
-from .utils import KFold, _check_split_dfs, _save_split_dfs, _validate_train_test_fractions, \
+from .utils import KFold, _check_split_dfs, _save_split_dfs, _validate_train_validation_test_fractions, \
     _validate_inputs, _check_split_indices_passed
 
 
@@ -345,47 +345,186 @@ class MatFold:
             statistics[uk] = n / len(self.df[split_type])
         return statistics
 
-    def create_train_test_splits(
+    def create_train_validation_test_splits(
         self,
-        df: pd.DataFrame | None,
-        split_type: str,
-        train_fraction: float | None,
-        test_fraction: float | None,
+        split_type_validation: str,
+        split_type_test: str,
+        train_fraction: float | None = None,
+        validation_fraction: float | None = None,
+        test_fraction: float | None = None,
         fraction_tolerance: float = 0.05,
         keep_n_elements_in_train: list | int | None = None,
         default_train: list | None = None,
+        default_validation: list | None = None,
         default_test: list | None = None,
         write_base_str: str = "mf",
         output_dir: str | os.PathLike | None = None,
-        generate_split_files: bool = True,
         verbose: bool = False,
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        if df is None:
-            df = self.df.copy()
+    ) -> tuple[pd.DataFrame, pd.DataFrame | None, pd.DataFrame]:
+        """Create train, validation, and test splits based on two specified split types.
+
+        :param split_type_validation: Type of splitting for the validation set. Must be either "index", 
+        "structureid", "composition", "chemsys", "sgnum", "pointgroup", "crystalsys", "elements", 
+        "periodictablerows", or "periodictablegroups".
+        :param split_type_test: Type of splitting for the test set. Same options as `split_type_validation`.
+        :param train_fraction: Fraction of the dataset to be used for training.
+        :param validation_fraction: Fraction of the dataset to be used for validation.
+        :param test_fraction: Fraction of the dataset to be used for testing.
+        :param fraction_tolerance: Tolerance for the fraction of data in each split.
+        :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
+        in the train set by default. For example, '2' will keep all binaries in the training set.
+        :param default_train: List of split labels which are put in the train set by default.
+        :param default_validation: List of split labels which are put in the validation set by default.
+        :param default_test: List of split labels which are put in the test set by default.
+        :param write_base_str: Beginning string of generated file names of the written splits.
+        :param output_dir: Directory where the files are written to.
+        :param verbose: Whether to print detailed information during execution.
+        :return: Tuple containing train, validation, and test DataFrames. 
+        Validation DataFrame may be None if validation_fraction is 0.
+        """
         if output_dir is None:
             output_dir = os.getcwd()
-
         if default_train is None:
             default_train = []
+        if default_validation is None:
+            default_validation = []
         if default_test is None:
             default_test = []
-
+        
         if keep_n_elements_in_train is None:
             keep_n_elements_in_train = []
         elif isinstance(keep_n_elements_in_train, int):
             keep_n_elements_in_train = [keep_n_elements_in_train]
 
-        _validate_inputs(
-            df,
-            None,
-            None,
-            split_type,
-            keep_n_elements_in_train,
+        for st in [split_type_validation, split_type_test]:
+            _validate_inputs(
+                self.df,
+                None,
+                None,
+                st,
+                keep_n_elements_in_train,
+            )
+        
+        trainf, valf, testf = _validate_train_validation_test_fractions(
+            train_fraction, validation_fraction, test_fraction
         )
 
-        trainf, testf = _validate_train_test_fractions(
-            train_fraction, test_fraction
+        path = os.path.join(output_dir, write_base_str + 
+                            f".{split_type_validation}-val_{split_type_test}-test_{trainf}-{valf}-{testf}.csv")
+        frame: FrameType | None = inspect.currentframe()
+        self._save_serialized(
+            frame, str(path).replace(".csv", ".json")
         )
+
+        trainval_df, test_df = self._create_train_test_splits(
+            None,
+            split_type_test,
+            trainf + valf,
+            testf,
+            fraction_tolerance=fraction_tolerance,
+            keep_n_elements_in_train=keep_n_elements_in_train,
+            default_train=default_train + default_validation,
+            default_test=default_test,
+            verbose=verbose,
+        )
+
+        if np.isclose(valf, 0.0):
+            _check_split_dfs(self.df, [trainval_df, test_df], verbose=verbose)
+            train_df = trainval_df.copy()
+            val_df = None
+        else:
+            train_df, val_df = self._create_train_test_splits(
+                trainval_df,
+                split_type_validation,
+                trainf / (trainf + valf),
+                valf / (trainf + valf),
+                fraction_tolerance=fraction_tolerance,
+                keep_n_elements_in_train=keep_n_elements_in_train,
+                default_train=default_train,
+                default_test=default_validation,
+                verbose=verbose,
+            )
+
+            _check_split_dfs(self.df, [train_df, val_df, test_df], verbose=verbose)
+        summary = {
+            "create_train_validation_test_splits": {
+                "split_type_validation": split_type_validation,
+                "split_type_test": split_type_test,
+                "train_fraction": trainf,
+                "validation_fraction": valf,
+                "test_fraction": testf,
+                "fraction_tolerance": fraction_tolerance,
+                "keep_n_elements_in_train": keep_n_elements_in_train,
+                "default_train": default_train,
+                "default_validation": default_validation,
+                "default_test": default_test,
+            },
+            "train_fraction_actual": len(train_df) / len(self.df),
+            "validation_fraction_actual": len(val_df) / len(self.df) if val_df is not None else 0.0,
+            "test_fraction_actual": len(test_df) / len(self.df),
+            "n_train": len(train_df),
+            "n_validation": len(val_df) if val_df is not None else 0,
+            "n_test": len(test_df),
+            "n_train_set_labels": len(set(train_df[split_type_validation].to_list())),
+            "n_validation_set_labels": len(set(val_df[split_type_validation].to_list())) if val_df is not None else 0,
+            "n_trainvalidation_set_labels": len(set(trainval_df[split_type_test].to_list())),
+            "n_test_set_labels": len(set(test_df[split_type_test].to_list())),
+            "train_set_labels": list(set(train_df[split_type_validation].to_list())),
+            "validation_set_labels": list(set(val_df[split_type_validation].to_list())) if val_df is not None else [],
+            "trainvalidation_set_labels": list(set(trainval_df[split_type_test].to_list())),
+            "test_set_labels": list(set(test_df[split_type_test].to_list())),
+        }
+
+        with open(str(path).replace(".csv", ".summary.json"), "w") as summary_file:
+            json.dump(summary, summary_file, indent=4)
+
+        train_df.loc[:, self.cols_to_keep].to_csv(
+            str(path).replace(".csv", ".train.csv"),
+            header=True,
+            index=False,
+        )
+        if val_df is not None:
+            val_df.loc[:, self.cols_to_keep].to_csv(
+                str(path).replace(".csv", ".validation.csv"),
+                header=True,
+                index=False,
+            )
+        test_df.loc[:, self.cols_to_keep].to_csv(
+            str(path).replace(".csv", ".test.csv"),
+            header=True,
+            index=False,
+        )
+        return train_df, val_df, test_df
+        
+    def _create_train_test_splits(
+        self,
+        df: pd.DataFrame | None,
+        split_type: str,
+        train_fraction: float,
+        test_fraction: float,
+        fraction_tolerance: float,
+        keep_n_elements_in_train: list,
+        default_train: list,
+        default_test: list,
+        verbose: bool = False,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Create train and test splits based on the specified split type.
+        
+        :param df: DataFrame to split. If None, then self.df is used.
+        :param split_type: Defines the type of splitting, must be either "index", "structureid", "composition",
+        "chemsys", "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups".
+        :param train_fraction: Fraction of the dataset to use for training.
+        :param test_fraction: Fraction of the dataset to use for testing.
+        :param fraction_tolerance: Tolerance for the fraction of data in each split.
+        :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
+        in the train set by default. For example, '2' will keep all binaries in the training set.
+        :param default_train: List of split labels which are put in the train set by default.
+        :param default_test: List of split labels which are put in the test set by default.
+        :param verbose: Whether to print detailed information during execution.
+        :return: Tuple containing train and test DataFrames.
+        """
+        if df is None:
+            df = self.df.copy()
 
         default_train_indices_nelements = (
             list(df[self.df["nelements"].isin(keep_n_elements_in_train)].index)
@@ -410,7 +549,7 @@ class MatFold:
         )
 
         split_possibilities_all = _get_unique_split_possibilities(
-            self.df,
+            df,
             keep_n_elements_in_train,
             split_type,
         )
@@ -424,16 +563,16 @@ class MatFold:
         default_train_fraction = len(default_train_indices) / len(df.index)
         default_test_fraction = len(default_test_indices) / len(df.index)
 
-        if default_train_fraction > trainf:
+        if default_train_fraction > train_fraction:
             raise ValueError(
                 f"Error. Default training set fraction ({default_train_fraction}) due to specified"
-                f"`keep_n_elements_in_train` and `default_train` is larger than requested training set size ({trainf})."
+                f"`keep_n_elements_in_train` and `default_train` is larger than requested training set size ({train_fraction})."
             )
 
-        if default_test_fraction > testf:
+        if default_test_fraction > test_fraction:
             raise ValueError(
                 f"Error. Default test set fraction ({default_test_fraction}) due to specified"
-                f"`default_test` is larger than requested training set size ({testf})."
+                f"`default_test` is larger than requested training set size ({test_fraction})."
             )
 
         naive_random_split = False
@@ -450,9 +589,9 @@ class MatFold:
                     outliers.append(sp)
                     outlier_total_fraction += frac
             print(f"{outliers=}\n {outlier_total_fraction=}", flush=True)
-            if outlier_total_fraction + default_train_fraction < 0.7 * trainf:
+            if outlier_total_fraction + default_train_fraction < 0.7 * train_fraction:
                 default_train_indices.extend(
-                    list(df[self.df[split_type].isin(outliers)].index)
+                    list(df[df[split_type].isin(outliers)].index)
                     if len(outliers) > 0
                     else []
                 )
@@ -466,8 +605,8 @@ class MatFold:
         if naive_random_split:
             test_size = int(
                 len(split_possibilities)
-                * (testf - default_test_fraction)
-                / (trainf - default_train_fraction + testf - default_test_fraction)
+                * (test_fraction - default_test_fraction)
+                / (train_fraction - default_train_fraction + test_fraction - default_test_fraction)
             )
             test_set = random.sample(split_possibilities, test_size)
             train_set = [item for item in split_possibilities if item not in test_set]
@@ -479,7 +618,7 @@ class MatFold:
                 ):
                     subset_sum = sum(stats[split_possibilities[i]] for i in indices)
                     if (
-                        abs(subset_sum + default_test_fraction - testf)
+                        abs(subset_sum + default_test_fraction - test_fraction)
                         <= fraction_tolerance
                     ):
                         test_set = [split_possibilities[i] for i in indices]
@@ -493,24 +632,25 @@ class MatFold:
             if not found:
                 raise ValueError(
                     f"No combination of split_possibilities could be found such that the final training set fraction "
-                    f"of {trainf} is reached within tolerance {fraction_tolerance}."
+                    f"of {train_fraction} is reached within tolerance {fraction_tolerance}."
                 )
 
         train_indices, test_indices = _get_split_indices(
-            self.df,
+            df,
             train_set,
             test_set,
             default_train_indices,
             default_test_indices,
             split_type,
         )
-        print(
-            f"{len(default_train_indices)=} ({len(default_train_indices)/len(df)=:.3f}),\n"
-            f"{len(default_test_indices)=} ({len(default_test_indices)/len(df)=:.3f}),\n"
-            f"{len(train_indices)=} ({len(train_indices)/len(df)=:.3f}),\n"
-            f"{len(test_indices)=} ({len(test_indices)/len(df)=:.3f})",
-            flush=True,
-        )
+        if verbose:
+            print(
+                f"{len(default_train_indices)=} ({len(default_train_indices)/len(df)=:.3f}),\n"
+                f"{len(default_test_indices)=} ({len(default_test_indices)/len(df)=:.3f}),\n"
+                f"{len(train_indices)=} ({len(train_indices)/len(df)=:.3f}),\n"
+                f"{len(test_indices)=} ({len(test_indices)/len(df)=:.3f})",
+                flush=True,
+            )
         if (
             len(train_indices + default_train_indices) == 0
             or len(test_indices + default_test_indices) == 0
@@ -521,7 +661,7 @@ class MatFold:
             )
 
         train_df, test_df = _save_split_dfs(
-            self.df,
+            df,
             train_indices,
             test_indices,
             default_train_indices,
@@ -529,8 +669,9 @@ class MatFold:
             self.cols_to_keep,
             None,
         )
-        _check_split_dfs(self.df, [train_df, test_df], verbose=verbose)
-        print(f"{len(train_df)/len(self.df)=:.3f}, {len(test_df)/len(self.df)=:.3f}")
+        _check_split_dfs(df, [train_df, test_df], verbose=verbose)
+        if verbose:
+            print(f"{len(train_df)/len(df)=:.3f}, {len(test_df)/len(df)=:.3f}")
         return train_df, test_df
 
     def create_nested_splits(
@@ -569,7 +710,7 @@ class MatFold:
         :param fraction_lower_limit: If a split possiblity is represented in the dataset with a fraction below
         this limit then the corresponding indices will be forced to be in the training set by default.
         :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
-        in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
+        in the train set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
         :param min_train_test_factor: Minimum factor that the training set needs to be
         larger (for factors greater than 1.0) than the test set.
         :param inner_equals_outer_split_strategy: If true, then the inner splitting strategy used is equal to
