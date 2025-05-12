@@ -21,6 +21,7 @@ from ._version import __version__
 from .utils import KFold, _check_split_dfs, _save_split_dfs, _validate_train_validation_test_fractions, \
     _validate_inputs, _check_split_indices_passed
 
+MAX_OUTLIER_FRACTION_FOR_NAIVE_SPLIT = 0.7
 
 def cifs_to_dict(directory: str | os.PathLike) -> dict:
     """Convert a directory of cif files into a dictionary.
@@ -565,13 +566,13 @@ class MatFold:
 
         if default_train_fraction > train_fraction:
             raise ValueError(
-                f"Error. Default training set fraction ({default_train_fraction}) due to specified"
+                f"Error. Default training set fraction ({default_train_fraction}) based on specified"
                 f"`keep_n_elements_in_train` and `default_train` is larger than requested training set size ({train_fraction})."
             )
 
         if default_test_fraction > test_fraction:
             raise ValueError(
-                f"Error. Default test set fraction ({default_test_fraction}) due to specified"
+                f"Error. Default test set fraction ({default_test_fraction}) based on specified"
                 f"`default_test` is larger than requested training set size ({test_fraction})."
             )
 
@@ -580,22 +581,29 @@ class MatFold:
             naive_random_split = True
         else:
             stats = self.split_statistics(split_type)
-            average_fraction = sum(stats.values()) / len(stats.values())
+            average_fraction = sum([stats[sp] for sp in split_possibilities]) / len(split_possibilities)
             outliers = []
             outlier_total_fraction = 0.0
             print(f"{average_fraction=}", flush=True)
-            for sp, frac in stats.items():
+            # Split possibilities that have a larger fraction than the average (considering `fraction_tolerance`) are considered "outliers" 
+            # to determine whether to split naively (randomly, assuming every split label contributes equally to the test/training sets) or not. 
+            # The outliers are added to the training set by default.
+            for sp in split_possibilities:
+                frac = stats[sp]
                 if abs(frac - average_fraction) > fraction_tolerance:
                     outliers.append(sp)
                     outlier_total_fraction += frac
-            print(f"{outliers=}\n {outlier_total_fraction=}", flush=True)
-            if outlier_total_fraction + default_train_fraction < 0.7 * train_fraction:
-                default_train_indices.extend(
-                    list(df[df[split_type].isin(outliers)].index)
-                    if len(outliers) > 0
-                    else []
-                )
-                default_train_indices = list(set(default_train_indices))
+            if verbose:
+                print(f"{outliers=}\n {outlier_total_fraction=}", flush=True)
+            outlier_indices = (
+                list(df[self.df[split_type].isin(outliers)].index)
+                if len(outliers) > 0
+                else []
+            )
+            # If the fraction of outliers and default training is less than `MAX_OUTLIER_FRACTION_FOR_NAIVE_SPLIT` times `train_fraction`, 
+            # then do naive random splitting. This is a somewhat arbitrary threshold.
+            if len(set(default_train_indices + outlier_indices)) / len(df.index) < MAX_OUTLIER_FRACTION_FOR_NAIVE_SPLIT * train_fraction:
+                default_train_indices = list(set(default_train_indices + outlier_indices))
                 default_train_fraction = len(default_train_indices) / len(df.index)
                 split_possibilities = [
                     sp for sp in split_possibilities.copy() if sp not in outliers
@@ -612,6 +620,10 @@ class MatFold:
             train_set = [item for item in split_possibilities if item not in test_set]
         else:
             found = False
+            # Go through all combinations of split possibilities to find a combination that matches the requested train/test split fractions
+            # within the tolerance. For large number of split possibilities, this can be slow. This will return the first combination 
+            # that matches the requested split fractions and will not search for the most optimal one.
+            random.shuffle(split_possibilities)  # to ensure that seed affects the search
             for r in range(1, len(split_possibilities) + 1):
                 for indices in itertools.combinations(
                     range(len(split_possibilities)), r
