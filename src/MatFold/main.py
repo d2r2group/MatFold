@@ -622,18 +622,23 @@ class MatFold:
             found = False
             # Go through all combinations of split possibilities to find a combination that matches the requested train/test split fractions
             # within the tolerance. For large number of split possibilities, this can be slow. This will return the first combination 
-            # that matches the requested split fractions and will not search for the most optimal one.
+            # that matches the requested split fractions and will not search for the most optimal one (instead, user can decrease `fraction_tolerance`).
             random.shuffle(split_possibilities)  # to ensure that seed affects the search
             for r in range(1, len(split_possibilities) + 1):
                 for indices in itertools.combinations(
                     range(len(split_possibilities)), r
                 ):
-                    subset_sum = sum(stats[split_possibilities[i]] for i in indices)
+                    test_set = [split_possibilities[i] for i in indices]
+                    sp_test_indices = (
+                        list(df[self.df[split_type].isin(test_set)].index)
+                        if len(default_test) > 0
+                        else []
+                    )
+                    current_test_fraction = len(set(sp_test_indices + default_test_indices)) / len(df.index)
                     if (
-                        abs(subset_sum + default_test_fraction - test_fraction)
+                        abs(current_test_fraction - test_fraction)
                         <= fraction_tolerance
                     ):
-                        test_set = [split_possibilities[i] for i in indices]
                         train_set = [
                             item for item in split_possibilities if item not in test_set
                         ]
