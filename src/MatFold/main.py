@@ -19,9 +19,10 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from ._version import __version__
 from .utils import KFold, _check_split_dfs, _save_split_dfs, _validate_train_validation_test_fractions, \
-    _validate_inputs, _check_split_indices_passed
+    _validate_inputs, _check_split_indices_passed, VALID_SPLIT_TYPES
 
 MAX_OUTLIER_FRACTION_FOR_NAIVE_SPLIT = 0.7
+
 
 def cifs_to_dict(directory: str | os.PathLike) -> dict:
     """Convert a directory of cif files into a dictionary.
@@ -46,8 +47,18 @@ class MatFold:
     """A class for handling materials data and creating cross-validation splits.
 
     This class provides functionality for processing materials data and creating
-    various types of cross-validation splits based on different criteria like
-    crystal systems, chemical compositions, and space groups.
+    various types of cross-validation splits based on the following criteria 
+    (strings may also contain underscores at any point, e.g. `chemical_system`):
+    - `index` (or `random`)
+    - `structureid` (or `structure`)
+    - `composition` (or `comp`)
+    - `chemsys` (or `chemicalsystem`)
+    - `sgnum` (or `spacegroup`, `spacegroupnumber`)
+    - `pointgroup` (or `pg`, `pointgroupsymbol`, `pgsymbol`)
+    - `crystalsys` (or `crystalsystem`)
+    - `elements` (or `elems`)
+    - `periodictablerows` (or `ptrows`)
+    - `periodictablegroups` (or `ptgroups`)
     """
 
     def __init__(
@@ -307,22 +318,12 @@ class MatFold:
         Analyzes the statistics of the sgnum, pointgroup, crystalsys, chemsys, composition,
         elements, periodictablerows, and periodictablegroups splits.
 
-        :param split_type: String specifying the splitting type
+        :param split_type: String specifying the splitting type.
         :return: Dictionary with keys of unique split values and the corresponding fraction of
         this key being represented in the entire dataset.
         """
-        if split_type not in [
-            "structureid",
-            "chemsys",
-            "composition",
-            "sgnum",
-            "pointgroup",
-            "crystalsys",
-            "elements",
-            "periodictablerows",
-            "periodictablegroups",
-        ]:
-            return {}
+        _validate_inputs(None, None, None, split_type, None)
+        split_type = VALID_SPLIT_TYPES[split_type.replace("_", "")]
         if split_type in ["elements", "periodictablerows", "periodictablegroups"]:
             statistics = dict.fromkeys(
                 list(set(itertools.chain.from_iterable(self.df[split_type]))), 0.0
@@ -364,10 +365,8 @@ class MatFold:
     ) -> tuple[pd.DataFrame, pd.DataFrame | None, pd.DataFrame]:
         """Create train, validation, and test splits based on two specified split types.
 
-        :param split_type_validation: Type of splitting for the validation set. Must be either "index", 
-        "structureid", "composition", "chemsys", "sgnum", "pointgroup", "crystalsys", "elements", 
-        "periodictablerows", or "periodictablegroups".
-        :param split_type_test: Type of splitting for the test set. Same options as `split_type_validation`.
+        :param split_type_validation: String specifying the splitting type for the validation set.
+        :param split_type_test: String specifying the splitting type for the test set.
         :param train_fraction: Fraction of the dataset to be used for training.
         :param validation_fraction: Fraction of the dataset to be used for validation.
         :param test_fraction: Fraction of the dataset to be used for testing.
@@ -405,6 +404,8 @@ class MatFold:
                 st,
                 keep_n_elements_in_train,
             )
+        split_type_validation = VALID_SPLIT_TYPES[split_type_validation.replace("_", "")]
+        split_type_test = VALID_SPLIT_TYPES[split_type_test.replace("_", "")]
         
         trainf, valf, testf = _validate_train_validation_test_fractions(
             train_fraction, validation_fraction, test_fraction
@@ -512,8 +513,7 @@ class MatFold:
         """Create train and test splits based on the specified split type.
         
         :param df: DataFrame to split. If None, then self.df is used.
-        :param split_type: Defines the type of splitting, must be either "index", "structureid", "composition",
-        "chemsys", "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups".
+        :param split_type: String specifying the splitting type.
         :param train_fraction: Fraction of the dataset to use for training.
         :param test_fraction: Fraction of the dataset to use for testing.
         :param fraction_tolerance: Tolerance for the fraction of data in each split.
@@ -715,13 +715,12 @@ class MatFold:
         Lastly, a JSON file is saved that stores all relevant class and function variables to recreate the splits
         utilizing the class function `from_json` and is named `<write_base_str>.<split_type>.json`.
 
-        :param split_type: Defines the type of splitting, must be either "index", "structureid", "composition",
-        "chemsys", "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups"
+        :param split_type: String specifying the splitting type.
         :param n_inner_splits: Number of inner splits (for nested k-fold); if set to 0, then `n_inner_splits` is set
         equal to the number of inner test possiblities (i.e., each inner test set holds one possibility out
-        for all possible options)
+        for all possible options).
         :param n_outer_splits: Number of outer splits (k-fold); if set to 0, then `n_outer_splits` is set equal to the
-        number of test possiblities (i.e., each outer test set holds one possibility out for all possible options)
+        number of test possiblities (i.e., each outer test set holds one possibility out for all possible options).
         :param fraction_upper_limit: If a split possiblity is represented in the dataset with a fraction above
         this limit then the corresponding indices will be forced to be in the training set by default.
         :param fraction_lower_limit: If a split possiblity is represented in the dataset with a fraction below
@@ -733,7 +732,7 @@ class MatFold:
         :param inner_equals_outer_split_strategy: If true, then the inner splitting strategy used is equal to
         the outer splitting strategy, if false, then inner splitting strategy is random (by index).
         :param write_base_str: Beginning string of csv file names of the written splits
-        :param output_dir: Directory where the splits are written to
+        :param output_dir: Directory where the splits are written to.
         :param verbose: Whether to print out details during code execution.
         :return: None
         """
@@ -752,6 +751,7 @@ class MatFold:
             split_type,
             keep_n_elements_in_train,
         )
+        split_type = VALID_SPLIT_TYPES[split_type.replace("_", "")]
 
         frame: FrameType | None = inspect.currentframe()
         self._save_serialized(
@@ -1129,14 +1129,13 @@ class MatFold:
         Lastly, a JSON file is saved that stores all relevant class and function variables to recreate the splits
         utilizing the class function `from_json` and is named `<write_base_str>.<split_type>.loo.<loo_label>.json`.
 
-        :param split_type: Defines the type of splitting, must be either "structureid", "composition", "chemsys",
-        "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups".
+        :param split_type: String specifying the splitting type.
         :param loo_label: Label specifying which single option is to be left out (i.e., constitute the test set).
         This label must be a valid option for the specified `split_type`.
         :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
         in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
         :param write_base_str: Beginning string of csv file names of the written splits
-        :param output_dir: Directory where the splits are written to
+        :param output_dir: Directory where the splits are written to.
         :param verbose: Whether to print out details during code execution.
         :return: None
         """
@@ -1149,6 +1148,7 @@ class MatFold:
             keep_n_elements_in_train = [keep_n_elements_in_train]
 
         _validate_inputs(self.df, None, None, split_type, keep_n_elements_in_train)
+        split_type = VALID_SPLIT_TYPES[split_type.replace("_", "")]
 
         frame: FrameType | None = inspect.currentframe()
         self._save_serialized(
@@ -1260,8 +1260,8 @@ def _get_unique_split_possibilities(
     :param df: DataFrame containing the dataset.
     :param keep_n_elements_in_train: List of number of elements for which the corresponding materials are kept
     in the test set by default (i.e., not k-folded). For example, '2' will keep all binaries in the training set.
-    :param split_type: String specifying the splitting type
-    :return: List of unique split labels
+    :param split_type: String specifying the splitting type.
+    :return: List of unique split labels.
     """
     if len(keep_n_elements_in_train) > 0:
         if split_type in ["elements", "periodictablerows", "periodictablegroups"]:

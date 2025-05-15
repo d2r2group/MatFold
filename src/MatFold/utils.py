@@ -18,6 +18,34 @@ import numpy as np
 import pandas as pd
 
 
+VALID_SPLIT_TYPES = {
+    "index": "index",
+    "random": "index",
+    "structureid": "structureid",
+    "structure": "structureid",
+    "composition": "composition",
+    "comp": "composition",
+    "chemsys": "chemsys",
+    "chemicalsystem": "chemsys",
+    "sgnum": "sgnum",
+    "spacegroup": "sgnum",
+    "spacegroupnumber": "sgnum",
+    "pointgroup": "pointgroup",
+    "pg": "pointgroup",
+    "pointgroupnumber": "pointgroup",
+    "pointgroupsymbol": "pointgroup",
+    "pgsymbol": "pointgroup",
+    "crystalsys": "crystalsys",
+    "crystalsystem": "crystalsys",
+    "elements": "elements",
+    "elems": "elements",
+    "periodictablerows": "periodictablerows",
+    "ptrows": "periodictablerows",
+    "periodictablegroups": "periodictablegroups",
+    "ptgroups": "periodictablegroups",
+}
+
+
 def _num_samples(x):
     """Return number of samples in array-like x."""
     message = "Expected sequence or array-like, got %s" % type(x)
@@ -337,11 +365,11 @@ def _validate_train_validation_test_fractions(
 
 
 def _validate_inputs(
-    df: pd.DataFrame,
+    df: pd.DataFrame | None,
     fraction_upper_limit: float | None,
     fraction_lower_limit: float | None,
     split_type: str,
-    keep_n_elements_in_train: list[int],
+    keep_n_elements_in_train: list[int] | None,
 ) -> None:
     """Validate input parameters for nested and LOO splitting.
 
@@ -372,30 +400,18 @@ def _validate_inputs(
                 "greater or equal to 0.0 and less or equal to 1.0",
             )
 
-    if split_type not in [
-        "index",
-        "structureid",
-        "composition",
-        "chemsys",
-        "pointgroup",
-        "sgnum",
-        "crystalsys",
-        "elements",
-        "periodictablerows",
-        "periodictablegroups",
-    ]:
+    if split_type.replace("_", "") not in VALID_SPLIT_TYPES.keys():
         raise ValueError(
-            'Error: `split_type` must be either "index", "structureid", '
-            '"composition", "chemsys", "sgnum", "pointgroup", "crystalsys", '
-            '"elements", "periodictablerows", or "periodictablegroups"',
+            f'Error: `split_type` must be one of the following: {VALID_SPLIT_TYPES.keys()}.',
         )
 
-    for n in keep_n_elements_in_train:
-        if n not in df["nelements"].tolist():
-            raise ValueError(
-                f"Error: No structure exists in the dataset that contain {n} elements. "
-                f"Adjust `keep_n_elements_in_train` accordingly.",
-            )
+    if df is not None and keep_n_elements_in_train is not None:
+        for n in keep_n_elements_in_train:
+            if n not in df["nelements"].tolist():
+                raise ValueError(
+                    f"Error: No structure exists in the dataset that contain {n} elements. "
+                    f"Adjust `keep_n_elements_in_train` accordingly.",
+                )
 
 
 def _check_split_indices_passed(

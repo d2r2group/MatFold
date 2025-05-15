@@ -7,6 +7,7 @@
 ![Python - Version](https://img.shields.io/pypi/pyversions/MatFold)
 [![PyPI - Version](https://img.shields.io/pypi/v/MatFold?color=blue)](https://pypi.org/project/MatFold)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13147391.svg)](https://doi.org/10.5281/zenodo.13147391)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 This is a Python package for gaining systematic insights into materials discovery models’ 
 performance through standardized, reproducible, and featurization-agnostic chemical and structural cross-validation protocols.
@@ -63,16 +64,16 @@ in the selected subset of the data.
 
 Once the `MatFold` class is initialized with the material data, the user can choose from various chemical and 
 structural holdout strategies when creating their splits. The available splitting options are: 
- - *"index"* (naive random splitting)
- - *"structureid"* (split by parent bulk structure - this is identical to *"index"* for datasets where each entry corresponds to a unique bulk structure)
- - *"composition"*
- - *"chemsys"*
- - *"sgnum"* (Space group number)
- - *"pointgroup"*
- - *"crystalsys"*
- - *"elements"*
- - *"periodictablerows"*
- - *"periodictablegroups"*
+- `index` (or `random`) [naive random splitting]
+- `structureid` (or `structure`) [split by parent bulk structure - this is identical to `index` for datasets where each entry corresponds to a unique bulk structure]
+- `composition` (or `comp`)
+- `chemsys` (or `chemicalsystem`)
+- `sgnum` (or `spacegroup`, `spacegroupnumber`)
+- `pointgroup` (or `pg`, `pointgroupsymbol`, `pgsymbol`)
+- `crystalsys` (or `crystalsystem`)
+- `elements` (or `elems`)
+- `periodictablerows` (or `ptrows`)
+- `periodictablegroups` (or `ptgroups`)
 
 Further, the user can analyze the distribution of unique split values and the corresponding 
 fraction (prevalence) in the dataset by using the class function `split_statistics`. 
@@ -106,7 +107,7 @@ stats = mf.split_statistics('crystalsys')
 print(stats)  # print out statistics for the `crystalsys` split strategy
 # Create all nested (and non-nested) splits utilizing `crystalsys` with the outer 
 # split being leave-one-out and the inner splits being split into 5.
-mf.create_splits('crystalsys', n_outer_splits=0, n_inner_splits=5, output_dir='./output/', verbose=True)
+mf.create_nested_splits('crystalsys', n_outer_splits=0, n_inner_splits=5, output_dir='./output/', verbose=True)
 # Create a single leave-one-out split where Iron is held out from the dataset
 mf.create_loo_split('elements', 'Fe', output_dir='./output/', verbose=True)
 ```

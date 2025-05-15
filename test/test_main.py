@@ -54,6 +54,16 @@ def test_statistics(load_test_data):
     assert len(stats.keys()) == 7
     assert pytest.approx(sum(stats.values()), 0.01) == 1.0
 
+def test_split_synonyms(load_test_data):
+    """Test the split_statistics method by verifying the statistics sum to 1.0 and have the expected number of crystal systems."""
+    cifs, data = load_test_data
+    mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
+    stats = mfc.split_statistics("crystalsystem")
+    stats2 = mfc.split_statistics("spacegroup_number")
+    assert len(stats2.keys()) == 47
+    assert len(stats.keys()) == 7
+    with pytest.raises(ValueError):
+        stats = mfc.split_statistics("non_existent_split")
 
 def test_train_test_splits_index(load_test_data):
     """Test the create_train_test_splits method by creating splits with specific parameters."""
