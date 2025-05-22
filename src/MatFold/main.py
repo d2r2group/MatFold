@@ -6,11 +6,11 @@ and analyzing model performance across different materials categories.
 
 import hashlib
 import inspect
-import itertools
 import json
 import os
 import random
 from types import FrameType
+from itertools import combinations
 
 import numpy as np
 import pandas as pd
@@ -353,6 +353,8 @@ class MatFold:
         default_train: list | None = None,
         default_validation: list | None = None,
         default_test: list | None = None,
+        n_validation_min: int = 1,
+        n_test_min: int = 1,
         write_base_str: str = "mf",
         output_dir: str | os.PathLike | None = None,
         verbose: bool = False,
@@ -370,6 +372,8 @@ class MatFold:
         :param default_train: List of split labels which are put in the train set by default.
         :param default_validation: List of split labels which are put in the validation set by default.
         :param default_test: List of split labels which are put in the test set by default.
+        :param n_validation_min: Minimum number of labels in the validation set.
+        :param n_test_min: Minimum number of labels in the test set.
         :param write_base_str: Beginning string of generated file names of the written splits.
         :param output_dir: Directory where the files are written to.
         :param verbose: Whether to print detailed information during execution.
@@ -421,6 +425,7 @@ class MatFold:
             keep_n_elements_in_train=keep_n_elements_in_train,
             default_train=default_train + default_validation,
             default_test=default_test,
+            n_test_min=n_test_min,
             verbose=verbose,
         )
 
@@ -438,6 +443,7 @@ class MatFold:
                 keep_n_elements_in_train=keep_n_elements_in_train,
                 default_train=default_train,
                 default_test=default_validation,
+                n_test_min=n_validation_min,
                 verbose=verbose,
             )
 
@@ -454,6 +460,8 @@ class MatFold:
                 "default_train": default_train,
                 "default_validation": default_validation,
                 "default_test": default_test,
+                "n_validation_min": n_validation_min,
+                "n_test_min": n_test_min,
             },
             "train_fraction_actual": len(train_df) / len(self.df),
             "validation_fraction_actual": len(val_df) / len(self.df) if val_df is not None else 0.0,
@@ -502,6 +510,7 @@ class MatFold:
         keep_n_elements_in_train: list,
         default_train: list,
         default_test: list,
+        n_test_min: int = 1,
         verbose: bool = False,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Create train and test splits based on the specified split type.
@@ -515,6 +524,7 @@ class MatFold:
         in the train set by default. For example, '2' will keep all binaries in the training set.
         :param default_train: List of split labels which are put in the train set by default.
         :param default_test: List of split labels which are put in the test set by default.
+        :param n_test_min: Minimum number of labels in the test set.
         :param verbose: Whether to print detailed information during execution.
         :return: Tuple containing train and test DataFrames.
         """
@@ -604,17 +614,12 @@ class MatFold:
             # within the tolerance. For large number of split possibilities, this can be slow. This will return the first combination 
             # that matches the requested split fractions and will not search for the most optimal one (instead, user can decrease `fraction_tolerance`).
             random.shuffle(split_possibilities)  # to ensure that seed affects the search
-            for r in range(1, len(split_possibilities) + 1):
-                for indices in itertools.combinations(
-                    range(len(split_possibilities)), r
-                ):
+            for r in range(n_test_min, len(split_possibilities) + 1):
+                for indices in combinations(range(len(split_possibilities)), r):
                     test_set = [split_possibilities[i] for i in indices]
                     sp_test_indices = _get_split_set_indices(df, test_set, [], split_type)
                     current_test_fraction = len(set(sp_test_indices + default_test_indices)) / len(df.index)
-                    if (
-                        abs(current_test_fraction - test_fraction)
-                        <= fraction_tolerance
-                    ):
+                    if abs(current_test_fraction - test_fraction) <= fraction_tolerance:
                         train_set = [
                             item for item in split_possibilities if item not in test_set
                         ]
@@ -625,7 +630,8 @@ class MatFold:
             if not found:
                 raise ValueError(
                     f"No combination of split_possibilities could be found such that the final training set fraction "
-                    f"of {train_fraction} is reached within tolerance {fraction_tolerance}."
+                    f"of {train_fraction} is reached within tolerance {fraction_tolerance} "
+                    f"and minimum test set label number {n_test_min}."
                 )
 
         train_indices, test_indices = _get_train_test_indices(
