@@ -1,7 +1,7 @@
 """Utility functions for MatFold class that verify input parameters and split indices.
 
-Further contains a minimal reproduction of the `KFold` class from scikit-learn to 
-remove package dependency.
+Further contains a minimal reproduction of the `KFold` class from scikit-learn and 
+`collapse` from more-itertools to remove package dependency.
 
 BSD 3-Clause License
 
@@ -13,6 +13,8 @@ All rights reserved.
 import numbers
 import collections
 import os
+from collections import deque
+from itertools import repeat
 
 import numpy as np
 import pandas as pd
@@ -245,6 +247,66 @@ class KFold:
             start, stop = current, current + fold_size
             yield indices[start:stop]
             current = stop
+
+# Taken from more-itertools v10.7.0
+def collapse(iterable, base_type=None, levels=None):
+    """Flatten an iterable with multiple levels of nesting (e.g., a list of
+    lists of tuples) into non-iterable types.
+
+        >>> iterable = [(1, 2), ([3, 4], [[5], [6]])]
+        >>> list(collapse(iterable))
+        [1, 2, 3, 4, 5, 6]
+
+    Binary and text strings are not considered iterable and
+    will not be collapsed.
+
+    To avoid collapsing other types, specify *base_type*:
+
+        >>> iterable = ['ab', ('cd', 'ef'), ['gh', 'ij']]
+        >>> list(collapse(iterable, base_type=tuple))
+        ['ab', ('cd', 'ef'), 'gh', 'ij']
+
+    Specify *levels* to stop flattening after a certain level:
+
+    >>> iterable = [('a', ['b']), ('c', ['d'])]
+    >>> list(collapse(iterable))  # Fully flattened
+    ['a', 'b', 'c', 'd']
+    >>> list(collapse(iterable, levels=1))  # Only one level flattened
+    ['a', ['b'], 'c', ['d']]
+
+    """
+    stack = deque()
+    # Add our first node group, treat the iterable as a single node
+    stack.appendleft((0, repeat(iterable, 1)))
+
+    while stack:
+        node_group = stack.popleft()
+        level, nodes = node_group
+
+        # Check if beyond max level
+        if levels is not None and level > levels:
+            yield from nodes
+            continue
+
+        for node in nodes:
+            # Check if done iterating
+            if isinstance(node, (str, bytes)) or (
+                (base_type is not None) and isinstance(node, base_type)
+            ):
+                yield node
+            # Otherwise try to create child nodes
+            else:
+                try:
+                    tree = iter(node)
+                except TypeError:
+                    yield node
+                else:
+                    # Save our current location
+                    stack.appendleft(node_group)
+                    # Append the new child node
+                    stack.appendleft((level + 1, tree))
+                    # Break to process child node
+                    break
 
 def _check_split_dfs(
     df: pd.DataFrame,
