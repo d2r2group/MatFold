@@ -69,7 +69,7 @@ def test_train_test_splits_index(load_test_data):
     """Test the create_train_test_splits method by creating splits with specific parameters."""
     cifs, data = load_test_data
     mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
-    tdf, tdf = mfc._create_train_test_splits(
+    tdf, tdf, _, _, _ = mfc._create_train_test_splits(
         None,
         "index",
         0.7,
@@ -85,7 +85,7 @@ def test_train_test_splits_structureid(load_test_data):
     """Test the create_train_test_splits method by creating splits with specific parameters."""
     cifs, data = load_test_data
     mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
-    tdf, tdf = mfc._create_train_test_splits(
+    tdf, tdf, _, _, _ = mfc._create_train_test_splits(
         None,
         "structureid",
         0.7,
@@ -103,7 +103,7 @@ def test_train_test_splits_chemsys(load_test_data):
     mfc = MatFold(data, cifs, return_frac=0.5, always_include_n_elements=None)
     stats = mfc.split_statistics("chemsys")
     print(stats, flush=True)
-    tdf, tdf = mfc._create_train_test_splits(
+    tdf, tdf, _, _, _ = mfc._create_train_test_splits(
         None,
         "chemsys",
         0.7,
@@ -121,7 +121,7 @@ def test_train_test_splits_crystalsys(load_test_data):
     mfc = MatFold(data, cifs, return_frac=1.0, always_include_n_elements=None)
     stats = mfc.split_statistics("crystalsys")
     print(stats, flush=True)
-    tdf, tdf = mfc._create_train_test_splits(
+    tdf, tdf, _, _, _ = mfc._create_train_test_splits(
         None,
         "crystalsys",
         0.7,
