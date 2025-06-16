@@ -20,7 +20,7 @@ from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from ._version import __version__
-from .utils import KFold, _check_split_dfs, _save_split_dfs, _validate_train_validation_test_fractions, \
+from .utils import KFold, _check_split_dfs, _create_and_save_split_dfs, _validate_train_validation_test_fractions, \
     _validate_inputs, _check_split_indices_passed, collapse, VALID_SPLIT_TYPES
 
 MAX_OUTLIER_FRACTION_FOR_NAIVE_SPLIT = 0.7
@@ -497,18 +497,21 @@ class MatFold:
         with open(str(path).replace(".csv", ".summary.json"), "w") as summary_file:
             json.dump(summary, summary_file, indent=4)
 
-        train_df.loc[:, self.cols_to_keep].to_csv(
+        train_df = train_df.loc[:, self.cols_to_keep]
+        train_df.to_csv(
             str(path).replace(".csv", ".train.csv"),
             header=True,
             index=False,
         )
         if val_df is not None:
-            val_df.loc[:, self.cols_to_keep].to_csv(
+            val_df = val_df.loc[:, self.cols_to_keep]
+            val_df.to_csv(
                 str(path).replace(".csv", ".validation.csv"),
                 header=True,
                 index=False,
             )
-        test_df.loc[:, self.cols_to_keep].to_csv(
+        test_df = test_df.loc[:, self.cols_to_keep]
+        test_df.to_csv(
             str(path).replace(".csv", ".test.csv"),
             header=True,
             index=False,
@@ -678,7 +681,7 @@ class MatFold:
                 f"(len={len(test_indices + default_test_indices)}) set is empty and split cannot be created.",
             )
 
-        train_df, test_df = _save_split_dfs(
+        train_df, test_df = _create_and_save_split_dfs(
             df,
             train_indices,
             test_indices,
@@ -887,7 +890,7 @@ class MatFold:
                 write_base_str + f".{split_type}.k{i}_outer.csv",
             )
 
-            outer_train_df, outer_test_df = _save_split_dfs(
+            outer_train_df, outer_test_df = _create_and_save_split_dfs(
                 self.df,
                 outer_train_indices,
                 outer_test_indices,
@@ -1003,7 +1006,7 @@ class MatFold:
                         write_base_str + f".{split_type}.k{i}_outer.l{j}_inner.csv",
                     )
 
-                    inner_train_df, inner_test_df = _save_split_dfs(
+                    inner_train_df, inner_test_df = _create_and_save_split_dfs(
                         self.df,
                         inner_train_indices,
                         inner_test_indices,
@@ -1052,7 +1055,7 @@ class MatFold:
                         write_base_str + f".{split_type}.k{i}_outer.l{j}_inner.csv",
                     )
 
-                    inner_train_df, inner_test_df = _save_split_dfs(
+                    inner_train_df, inner_test_df = _create_and_save_split_dfs(
                         self.df,
                         final_inner_train_indices,
                         final_inner_test_indices,
@@ -1201,7 +1204,7 @@ class MatFold:
             output_dir,
             write_base_str + f".{split_type}.loo.{loo_label.replace('/', '_')}.csv",
         )
-        train_df, test_df = _save_split_dfs(
+        train_df, test_df = _create_and_save_split_dfs(
             self.df,
             train_indices,
             test_indices,

@@ -1,6 +1,7 @@
 src/MatFold/output/
 src/MatFold/test/
 test/output/
+test/output_utils/
 .idea/
 # Byte-compiled / optimized / DLL files
 __pycache__/

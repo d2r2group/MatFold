@@ -313,8 +313,8 @@ def _check_split_dfs(
     df_list: list[pd.DataFrame],
     verbose: bool = True,
 ) -> None:
-    """Check that there are no duplicates in dfs in `df_list` and that the number of indices in `df` is the same
-    as in the combined dfs in `df_list`
+    """Check that there are no duplicates or overlaps in dfs in `df_list` and that the number of indices
+    in `df` is the same as in the combined dfs in `df_list`
 
     :param df: DataFrame containing the dataset.
     :param df_list: List of sub dataframes.
@@ -335,24 +335,29 @@ def _check_split_dfs(
         for lst in indices_list
     ]
     if np.sum(duplicates) != 0:
-        raise Exception(
+        raise ValueError(
             "Error: Duplicate indices detected within individual dfs: ",
             duplicates,
         )
+    
+    if len(sum(indices_list, [])) != len(set(sum(indices_list, []))):
+        raise ValueError(
+            "Error: Some indices in the sub dataframes overlap with each other.",
+        )
 
     if sum(sizes_list) != len(df):
-        raise Exception(
+        raise ValueError(
             f"Error: Non-equal num of indices in splits {sum(sizes_list)} vs. original {len(df)}.",
         )
 
 
-def _save_split_dfs(
+def _create_and_save_split_dfs(
     df: pd.DataFrame,
-    train_indices: list | np.typing.NDArray,
-    test_indices: list | np.typing.NDArray,
-    default_train_indices: list | np.typing.NDArray,
-    default_test_indices: list | np.typing.NDArray,
-    cols_to_keep: list,
+    train_indices: list[int] | np.typing.NDArray[np.int64],
+    test_indices: list[int] | np.typing.NDArray[np.int64],
+    default_train_indices: list[int] | np.typing.NDArray[np.int64],
+    default_test_indices: list[int] | np.typing.NDArray[np.int64],
+    cols_to_keep: list[str],
     path: str | os.PathLike | None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Create train and test dfs and saves them as csv files (if path is specified).
@@ -367,10 +372,11 @@ def _save_split_dfs(
     :param default_test_indices: List of indices that are part of the test set by default.
     :param cols_to_keep: List of columns to keep in the splits.
     :param path: Path for the output files. Must end with `.csv`. If no path is specified then no files will be saved.
-    :return: Tuple of train and test dataframes.
+    :return: Tuple of train and test dataframes. Note that the returned dataframes will contain all columns regardless 
+    of `cols_to_keep` (unlike the saved files which only contain the `cols_to_keep` columns).
     """
-    test_df = df.loc[test_indices + default_test_indices, :].copy()
-    train_df = df.loc[train_indices + default_train_indices, :].copy()
+    train_df = df.loc[sorted(train_indices + default_train_indices), :].copy()
+    test_df = df.loc[sorted(test_indices + default_test_indices), :].copy()
     if path is not None:
         train_df.loc[:, cols_to_keep].to_csv(
             str(path).replace(".csv", ".train.csv"),
@@ -410,14 +416,14 @@ def _validate_train_validation_test_fractions(
         train_fraction <= 0.0
         or train_fraction >= 1.0
         or validation_fraction < 0.0
-        or validation_fraction > 1.0
+        or validation_fraction >= 1.0
         or test_fraction <= 0.0
         or test_fraction >= 1.0
     ):
         raise ValueError(
             "Error: `train_fraction` and `test_fraction` need to be "
             "greater than 0.0 and less than 1.0. `validation_fraction` needs to be "
-            "greater than or equal to 0.0 and less than or equal to 1.0.",
+            "greater than or equal to 0.0 and less than 1.0.",
         )
     if not np.isclose(train_fraction + validation_fraction + test_fraction, 1.0):
         raise ValueError(
@@ -489,7 +495,7 @@ def _check_split_indices_passed(
     :return: True if valid, False otherwise.
     """
     if len(set(train_indices).intersection(set(test_indices))) != 0:
-        raise Exception(
+        raise ValueError(
             f"Error: Training and test indices are not mutually exclusive "
             f"({len(set(train_indices).intersection(set()))} indices in common).",
         )
@@ -498,7 +504,7 @@ def _check_split_indices_passed(
             print(
                 f"Warning! Train set size ({len(train_indices)}) is smaller than "
                 f"test set size times min_train_test_factor ({len(test_indices)} * {min_train_test_factor} = "
-                f"{int(round(len(test_indices) * min_train_test_factor, 0))}).",
+                f"{round(len(test_indices) * min_train_test_factor, 2)}).",
                 flush=True,
             )
             return False

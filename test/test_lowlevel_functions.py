@@ -1,6 +1,5 @@
 """Test cases for low-level functions in MatFold package."""
 import json
-import os
 
 import pandas as pd
 import pytest
