@@ -71,6 +71,7 @@ class MatFold:
         always_include_n_elements: list[int] | int | None = None,
         cols_to_keep: list | None = None,
         keep_splitlabel_cols: bool = False,
+        write_data_checksums: bool = True,
         seed: int = 0,
     ) -> None:
         """MatFold class constructor.
@@ -88,6 +89,7 @@ class MatFold:
         :param cols_to_keep: List of columns to keep in the splits. If left `None`, then all columns of the
         original df are kept.
         :param keep_splitlabel_cols: Whether to keep the split label columns in the splits.
+        :param write_data_checksums: Whether to write the checksums of the data in `df` and `bulk_dict` to json.
         :param seed: Seed for selecting random subset of data and splits.
         """
         frame = inspect.currentframe()
@@ -98,17 +100,18 @@ class MatFold:
         bdh = hashlib.md5()
         for b in sorted(bulk_dict.keys()):
             bdh.update(b.encode("utf-8"))
-        self.serialized["data_checksums"] = [
-            int(
-                hashlib.md5(
-                    np.array(
-                        pd.util.hash_pandas_object(df, index=True).values
-                    ).tobytes(),
-                ).hexdigest(),
-                16,
-            ),
-            int(bdh.hexdigest(), 16),
-        ]
+        if write_data_checksums:
+            self.serialized["data_checksums"] = [
+                int(
+                    hashlib.md5(
+                        np.array(
+                            pd.util.hash_pandas_object(df, index=True).values
+                        ).tobytes(),
+                    ).hexdigest(),
+                    16,
+                ),
+                int(bdh.hexdigest(), 16),
+            ]
         serialized_init: dict = {}
         for key in keys:
             if key not in ["self", "df", "bulk_dict"]:
@@ -259,6 +262,10 @@ class MatFold:
         bulk_dict: dict[str, dict[str, Any]],
         json_file: str | os.PathLike,
         create_splits: bool = True,
+        enforce_checksums: bool = True,
+        write_base_str: str | None = None,
+        output_dir: str | os.PathLike | None = None,
+        verbose: bool | None = None
     ) -> MatFold:
         """Reconstruct a `MatFold` class instance, along with its associated splits.
 
@@ -276,41 +283,58 @@ class MatFold:
         :param json_file: Location of JSON file that is created when MatFold is used to
         generate splits.
         :param create_splits: Whether to create splits with the same json settings
+        :param enforce_checksums: If `True`, checksums of the provided `df` and `bulk_dict` are
+        compared to the checksums stored in the json_file. If they do not match, a error is raised.
+        :param write_base_str: Base string for writing split files. 
+        If not `None`, overwrites the value stored in the json_file.
+        :param output_dir: Directory where split files are written to. 
+        If not `None`, overwrites the value stored in the json_file.
+        :param verbose: If `True`, prints additional information during split creation.
+        If not `None`, overwrites the value stored in the json_file.
         :return: MatFold class instance
         """
         with open(json_file) as f:
             serialized_dict = json.load(f)
 
+        serialized_dict["__init__"]["write_data_checksums"] = enforce_checksums
         mf = MatFold(df, bulk_dict, **serialized_dict["__init__"])
-        bdh = hashlib.md5()
-        for b in sorted(bulk_dict.keys()):
-            bdh.update(b.encode("utf-8"))
-        df_checksum = int(
-            hashlib.md5(
-                np.array(pd.util.hash_pandas_object(df, index=True).values).tobytes()
-            ).hexdigest(),
-            16,
-        )
-        bd_checksum = int(bdh.hexdigest(), 16)
-        if df_checksum != serialized_dict["data_checksums"][0]:
-            print(
-                f"Warning! Data in `df` might be different to the data used during "
-                f"JSON file generation.\nChecksums original/current: "
-                f"{serialized_dict['data_checksums'][0]}/{df_checksum}",
+        if enforce_checksums:
+            bdh = hashlib.md5()
+            for b in sorted(bulk_dict.keys()):
+                bdh.update(b.encode("utf-8"))
+            df_checksum = int(
+                hashlib.md5(
+                    np.array(pd.util.hash_pandas_object(df, index=True).values).tobytes()
+                ).hexdigest(),
+                16,
             )
-        if bd_checksum != serialized_dict["data_checksums"][1]:
-            print(
-                "Warning! Data in `bulk_df` might be different to the data used during "
-                "JSON file generation (only keys are part of checksum, not the "
-                "structures themselves). "
-                f"Warning can be ignored if new data was added without changing the old data.\n"
-                f"Checksums original/current: {serialized_dict['data_checksums'][1]}/{bd_checksum}",
-            )
+            bd_checksum = int(bdh.hexdigest(), 16)
+            if df_checksum != serialized_dict["data_checksums"][0]:
+                raise ValueError(
+                    f"Error. Data in `df` might be different to the data used during "
+                    f"JSON file generation.\nChecksums original/current: "
+                    f"{serialized_dict['data_checksums'][0]}/{df_checksum}",
+                )
+            if bd_checksum != serialized_dict["data_checksums"][1]:
+                raise ValueError(
+                    "Error. Data in `bulk_df` might be different to the data used during "
+                    "JSON file generation (only keys are part of checksum, not the "
+                    "structures themselves). "
+                    f"Error can be ignored (set `enforce_checksums` to False) if new data "
+                    f"was added without changing the old data.\n"
+                    f"Checksums original/current: {serialized_dict['data_checksums'][1]}/{bd_checksum}",
+                )
 
         if not create_splits:
             return mf
 
         if "split_function_called" in serialized_dict:
+            if write_base_str is not None:
+                serialized_dict["split_parameters"]["write_base_str"] = write_base_str
+            if output_dir is not None:
+                serialized_dict["split_parameters"]["output_dir"] = output_dir
+            if verbose is not None:
+                serialized_dict["split_parameters"]["verbose"] = verbose
             if serialized_dict["split_function_called"] == "create_nested_splits":
                 mf.create_nested_splits(**serialized_dict["split_parameters"])
             elif serialized_dict["split_function_called"] == "create_loo_split":
