@@ -163,6 +163,7 @@ def __init__(
         always_include_n_elements: list[int] | int | None = None,
         cols_to_keep: list | None = None,
         keep_splitlabel_cols: bool = False,
+        write_data_checksums: bool = True,
         seed: int = 0,
     ) -> None:
 ```
@@ -184,6 +185,7 @@ always to be included in the dataset (for cases where `return_frac` < 1.0).
 - `cols_to_keep`: List of columns to keep in the splits. If left `None`, then all columns of the
 original df are kept.
 - `keep_splitlabel_cols`: Whether to keep the split label columns in the splits.
+- `write_data_checksums`: Whether to write the checksums of the data in `df` and `bulk_dict` to json.
 - `seed`: Seed for selecting random subset of data and splits.
 
 
@@ -197,6 +199,10 @@ def from_json(
         bulk_dict: dict[str, dict[str, Any]],
         json_file: str | os.PathLike,
         create_splits: bool = True,
+        enforce_checksums: bool = True,
+        write_base_str: str | None = None,
+        output_dir: str | os.PathLike | None = None,
+        verbose: bool | None = None,
     ) -> MatFold:
 ```
 
@@ -214,6 +220,14 @@ an identifier of a derivative structure). All other columns are optional and may
 dictionary as values.
 - `json_file`: Location of JSON file that is created when MatFold is used to generate splits.
 - `create_splits`: Whether to create splits with the same json settings
+- `enforce_checksums`: If `True`, checksums of the provided `df` and `bulk_dict` are compared to the 
+checksums stored in the json_file. If they do not match, a error is raised.
+- `write_base_str`: Base string for writing split files. If not `None`, overwrites the value stored 
+in the json_file.
+- `param output_dir`: Directory where split files are written to. If not `None`, overwrites the value stored 
+in the json_file.
+- `verbose`: If `True`, prints additional information during split creation. If not `None`, overwrites the 
+value stored in the json_file.
 
 **Returns**:
 
