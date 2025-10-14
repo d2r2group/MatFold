@@ -31,7 +31,8 @@ Please, cite the following [paper](https://doi.org/10.1039/D4DD00250D) if you us
 
 ## Installation
 
-`MatFold` can be installed using pip by running `pip install MatFold`.
+`MatFold` can be installed using `pip` (or `uv`) by running `pip install MatFold` (or `uv pip install MatFold`).
+
 Alternatively, this repository can be downloaded/cloned and then installed by running `pip install .` inside the main folder.
 
 ## Usage
