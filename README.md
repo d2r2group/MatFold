@@ -123,7 +123,7 @@ Below find a detailed documentation of all `MatFold` capabilities and descriptio
 def cifs_to_dict(directory: str | os.PathLike) -> dict[str, dict[str, Any]]
 ```
 
-Converts a directory of cif files into a dictionary with keys '<filename>' (of `<filename>.cif`) 
+Converts a directory of cif files into a dictionary with keys '\<filename>' (of `<filename>.cif`) 
 and values 'pymatgen dictionary' (parsed from `<filename>.cif`)
 
 **Arguments**:
@@ -132,7 +132,7 @@ and values 'pymatgen dictionary' (parsed from `<filename>.cif`)
 
 **Returns**:
 
-Dictionary of cif files with keys '<filename>' (of `<filename>.cif`).
+Dictionary of cif files with keys '\<filename>' (of `<filename>.cif`).
 Can be used as input `bulk_df` to `MatFold` class.
 
 ### Class `MatFold`
@@ -174,10 +174,10 @@ MatFold class constructor
 **Arguments**:
 
 - `df`: Pandas dataframe with the first column containing strings of either form `<structureid>` or
-`<structureid>:<structuretag>` (where <structureid> refers to a bulk ID and <structuretag> refers to
+`<structureid>:<structuretag>` (where \<structureid> refers to a bulk ID and \<structuretag> refers to
 an identifier of a derivative structure). All other columns are optional and may be retained specifying the
 `cols_to_keep` parameter described below.
-- `bulk_dict`: Dictionary containing <structureid> as keys and the corresponding bulk pymatgen
+- `bulk_dict`: Dictionary containing \<structureid> as keys and the corresponding bulk pymatgen
 dictionary as values.
 - `return_frac`: The fraction of the df dataset that is utilized during splitting.
 Must be larger than 0.0 and equal/less than 1.0 (=100%).
@@ -214,10 +214,10 @@ split creation must be provided to guarantee that the exact splits are regenerat
 **Arguments**:
 
 - `df`: Pandas dataframe with the first column containing strings of either form `<structureid>` or
-`<structureid>:<structuretag>` (where <structureid> refers to a bulk ID and <structuretag> refers to
+`<structureid>:<structuretag>` (where \<structureid> refers to a bulk ID and \<structuretag> refers to
 an identifier of a derivative structure). All other columns are optional and may be retained specifying the
 `cols_to_keep` parameter described below.
-- `bulk_dict`: Dictionary containing <structureid> as keys and the corresponding bulk pymatgen
+- `bulk_dict`: Dictionary containing \<structureid> as keys and the corresponding bulk pymatgen
 dictionary as values.
 - `json_file`: Location of JSON file that is created when MatFold is used to generate splits.
 - `create_splits`: Whether to create splits with the same json settings
