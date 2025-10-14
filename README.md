@@ -7,6 +7,7 @@
 ![Python - Version](https://img.shields.io/pypi/pyversions/MatFold)
 [![PyPI - Version](https://img.shields.io/pypi/v/MatFold?color=blue)](https://pypi.org/project/MatFold)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13147391.svg)](https://doi.org/10.5281/zenodo.13147391)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 This is a Python package for gaining systematic insights into materials discovery models’ 
 performance through standardized, reproducible, and featurization-agnostic chemical and structural cross-validation protocols.
@@ -30,7 +31,8 @@ Please, cite the following [paper](https://doi.org/10.1039/D4DD00250D) if you us
 
 ## Installation
 
-`MatFold` can be installed using pip by running `pip install MatFold`.
+`MatFold` can be installed using `pip` (or `uv`) by running `pip install MatFold` (or `uv pip install MatFold`).
+
 Alternatively, this repository can be downloaded/cloned and then installed by running `pip install .` inside the main folder.
 
 ## Usage
@@ -63,16 +65,16 @@ in the selected subset of the data.
 
 Once the `MatFold` class is initialized with the material data, the user can choose from various chemical and 
 structural holdout strategies when creating their splits. The available splitting options are: 
- - *"index"* (naive random splitting)
- - *"structureid"* (split by parent bulk structure - this is identical to *"index"* for datasets where each entry corresponds to a unique bulk structure)
- - *"composition"*
- - *"chemsys"*
- - *"sgnum"* (Space group number)
- - *"pointgroup"*
- - *"crystalsys"*
- - *"elements"*
- - *"periodictablerows"*
- - *"periodictablegroups"*
+- `index` (or `random`) [naive random splitting]
+- `structureid` (or `structure`) [split by parent bulk structure - this is identical to `index` for datasets where each entry corresponds to a unique bulk structure]
+- `composition` (or `comp`)
+- `chemsys` (or `chemicalsystem`)
+- `sgnum` (or `spacegroup`, `spacegroupnumber`)
+- `pointgroup` (or `pg`, `pointgroupsymbol`, `pgsymbol`)
+- `crystalsys` (or `crystalsystem`)
+- `elements` (or `elems`)
+- `periodictablerows` (or `ptrows`)
+- `periodictablegroups` (or `ptgroups`)
 
 Further, the user can analyze the distribution of unique split values and the corresponding 
 fraction (prevalence) in the dataset by using the class function `split_statistics`. 
@@ -90,7 +92,7 @@ the specified `split_type`.
 
 Below find an example of how running `MatFold` could look like:
 
-```Python3
+```python
 from MatFold import MatFold
 import pandas as pd
 import json
@@ -106,7 +108,7 @@ stats = mf.split_statistics('crystalsys')
 print(stats)  # print out statistics for the `crystalsys` split strategy
 # Create all nested (and non-nested) splits utilizing `crystalsys` with the outer 
 # split being leave-one-out and the inner splits being split into 5.
-mf.create_splits('crystalsys', n_outer_splits=0, n_inner_splits=5, output_dir='./output/', verbose=True)
+mf.create_nested_splits('crystalsys', n_outer_splits=0, n_inner_splits=5, output_dir='./output/', verbose=True)
 # Create a single leave-one-out split where Iron is held out from the dataset
 mf.create_loo_split('elements', 'Fe', output_dir='./output/', verbose=True)
 ```
@@ -118,7 +120,7 @@ Below find a detailed documentation of all `MatFold` capabilities and descriptio
 ### Function `cifs_to_dict`
 
 ```python
-def cifs_to_dict(directory: str | os.PathLike) -> dict
+def cifs_to_dict(directory: str | os.PathLike) -> dict[str, dict[str, Any]]
 ```
 
 Converts a directory of cif files into a dictionary with keys '<filename>' (of `<filename>.cif`) 
@@ -135,15 +137,36 @@ Can be used as input `bulk_df` to `MatFold` class.
 
 ### Class `MatFold`
 
+A class for handling materials data and creating cross-validation splits.
+
+This class provides functionality for processing materials data and creating
+various types of cross-validation splits based on the following criteria 
+(strings may also contain underscores at any point, e.g. `chemical_system`):
+- `index` (or `random`)
+- `structureid` (or `structure`)
+- `composition` (or `comp`)
+- `chemsys` (or `chemicalsystem`)
+- `sgnum` (or `spacegroup`, `spacegroupnumber`)
+- `pointgroup` (or `pg`, `pointgroupsymbol`, `pgsymbol`)
+- `crystalsys` (or `crystalsystem`)
+- `elements` (or `elems`)
+- `periodictablerows` (or `ptrows`)
+- `periodictablegroups` (or `ptgroups`)
+
 ### \_\_init\_\_
 
 ```python
-def __init__(df: pd.DataFrame,
-             bulk_dict: dict,
-             return_frac: float = 1.0,
-             always_include_n_elements: list | int | None = None,
-             cols_to_keep: list | None = None,
-             seed: int = 0) -> None
+def __init__(
+        self,
+        df: pd.DataFrame,
+        bulk_dict: dict[str, dict[str, Any]],
+        return_frac: float = 1.0,
+        always_include_n_elements: list[int] | int | None = None,
+        cols_to_keep: list | None = None,
+        keep_splitlabel_cols: bool = False,
+        write_data_checksums: bool = True,
+        seed: int = 0,
+    ) -> None:
 ```
 
 MatFold class constructor
@@ -162,6 +185,8 @@ Must be larger than 0.0 and equal/less than 1.0 (=100%).
 always to be included in the dataset (for cases where `return_frac` < 1.0).
 - `cols_to_keep`: List of columns to keep in the splits. If left `None`, then all columns of the
 original df are kept.
+- `keep_splitlabel_cols`: Whether to keep the split label columns in the splits.
+- `write_data_checksums`: Whether to write the checksums of the data in `df` and `bulk_dict` to json.
 - `seed`: Seed for selecting random subset of data and splits.
 
 
@@ -169,16 +194,22 @@ original df are kept.
 
 ```python
 @classmethod
-def from_json(cls,
-              df: pd.DataFrame,
-              bulk_dict: dict,
-              json_file: str | os.PathLike,
-              create_splits: bool = True)
+def from_json(
+        cls,
+        df: pd.DataFrame,
+        bulk_dict: dict[str, dict[str, Any]],
+        json_file: str | os.PathLike,
+        create_splits: bool = True,
+        enforce_checksums: bool = True,
+        write_base_str: str | None = None,
+        output_dir: str | os.PathLike | None = None,
+        verbose: bool | None = None,
+    ) -> MatFold:
 ```
 
-Reconstruct a `MatFold` class instance, along with its associated splits, from a JSON file previously generated 
-by the `create_splits` or `create_loo_split` methods. The same `df` and `bulk_dict` used during
-the original split creation must be provided to guarantee that the exact splits are regenerated.
+Previously generated by the `create_nested_splits`, `create_train_validation_test_splits`, 
+or `create_loo_split` methods. The same `df` and `bulk_dict` used during the original 
+split creation must be provided to guarantee that the exact splits are regenerated.
 
 **Arguments**:
 
@@ -190,6 +221,14 @@ an identifier of a derivative structure). All other columns are optional and may
 dictionary as values.
 - `json_file`: Location of JSON file that is created when MatFold is used to generate splits.
 - `create_splits`: Whether to create splits with the same json settings
+- `enforce_checksums`: If `True`, checksums of the provided `df` and `bulk_dict` are compared to the 
+checksums stored in the json_file. If they do not match, a error is raised.
+- `write_base_str`: Base string for writing split files. If not `None`, overwrites the value stored 
+in the json_file.
+- `param output_dir`: Directory where split files are written to. If not `None`, overwrites the value stored 
+in the json_file.
+- `verbose`: If `True`, prints additional information during split creation. If not `None`, overwrites the 
+value stored in the json_file.
 
 **Returns**:
 
@@ -199,11 +238,10 @@ MatFold class instance
 ### split\_statistics
 
 ```python
-def split_statistics(split_type: str) -> dict
+def split_statistics(split_type: str) -> dict[str, float]
 ```
 
-Analyzes the statistics of the sgnum, pointgroup, crystalsys, chemsys, composition, elements,  periodictablerows, 
-and periodictablegroups splits.
+Analyze statistics for splits of `split_type`.
 
 **Arguments**:
 
@@ -211,29 +249,78 @@ and periodictablegroups splits.
 
 **Returns**:
 
-Dictionary with keys of unique split values and the corresponding fraction of this key being 
+Dictionary with keys of unique split labels and the corresponding fraction of this key being 
 represented in the entire dataset.
 
-
-### create\_splits
+### create\_train\_validation\_test\_splits
 
 ```python
-def create_splits(split_type: str,
-                  n_inner_splits: int = 10,
-                  n_outer_splits: int = 10,
-                  fraction_upper_limit: float = 1.0,
-                  fraction_lower_limit: float = 0.0,
-                  keep_n_elements_in_train: list | int | None = None,
-                  min_train_test_factor: float | None = None,
-                  inner_equals_outer_split_strategy: bool = True,
-                  write_base_str: str = 'mf',
-                  output_dir: str | os.PathLike | None = None,
-                  verbose: bool = False) -> None
+def create_train_validation_test_splits(
+        self,
+        split_type_validation: str,
+        split_type_test: str,
+        train_fraction: float | None = None,
+        validation_fraction: float | None = None,
+        test_fraction: float | None = None,
+        fraction_tolerance: float = 0.05,
+        keep_n_elements_in_train: list[int] | int | None = None,
+        default_train: list[str] | None = None,
+        default_validation: list[str] | None = None,
+        default_test: list[str] | None = None,
+        n_validation_min: int = 1,
+        n_test_min: int = 1,
+        write_base_str: str = "mf",
+        output_dir: str | os.PathLike | None = None,
+        verbose: bool = False,
+    ) -> tuple[pd.DataFrame, pd.DataFrame | None, pd.DataFrame]
+```
+Create train, validation, and test splits based on two specified split types.
+
+**Arguments**:
+- `split_type_validation`: String specifying the splitting type for the validation set.
+- `split_type_test`: String specifying the splitting type for the test set.
+- `train_fraction`: Fraction of the dataset to be used for training.
+- `validation_fraction`: Fraction of the dataset to be used for validation.
+- `test_fraction`: Fraction of the dataset to be used for testing.
+- `fraction_tolerance`: Tolerance for the fraction of data in each split.
+- `keep_n_elements_in_train`: List of number of elements for which the corresponding materials are kept
+        in the train set by default. For example, '2' will keep all binaries in the training set.
+- `default_train`: List of split labels which are put in the train set by default.
+- `default_validation`: List of split labels which are put in the validation set by default.
+- `default_test`: List of split labels which are put in the test set by default.
+- `n_validation_min`: Minimum number of labels in the validation set.
+- `n_test_min`: Minimum number of labels in the test set.
+- `write_base_str`: Beginning string of generated file names of the written splits.
+- `output_dir`: Directory where the files are written to.
+- `verbose`: Whether to print detailed information during execution.
+
+**Returns**:
+
+Tuple containing train, validation, and test DataFrames. 
+Validation DataFrame may be None if `validation_fraction` is 0.
+
+### create\_nested\_splits
+
+```python
+def create_nested_splits(
+        self,
+        split_type: str,
+        n_inner_splits: int = 10,
+        n_outer_splits: int = 10,
+        fraction_upper_limit: float = 1.0,
+        fraction_lower_limit: float = 0.0,
+        keep_n_elements_in_train: list[int] | int | None = None,
+        min_train_test_factor: float | None = None,
+        inner_equals_outer_split_strategy: bool = True,
+        write_base_str: str = "mf",
+        output_dir: str | os.PathLike | None = None,
+        verbose: bool = False,
+    ) -> None:
 ```
 
-Creates splits based on `split_type`, `n_inner_splits`, `n_outer_splits` among other specifications 
-(cf. full list of function variables). The splits are saved in `output_dir` as csv files named
-`<write_base_str>.<split_type>.k<i>_outer.<train/test>.csv` and
+Create splits based on `split_type`, `n_inner_splits`, `n_outer_splits` among other specifications.
+
+The splits are saved in `output_dir` as csv files named `<write_base_str>.<split_type>.k<i>_outer.<train/test>.csv` and
 `<write_base_str>.<split_type>.k<i>_outer.l<j>_inner.<train/test>.csv` for all outer (index `<i>`) and inner
 splits (index `<j>`), respectively. Additionally, a summary of the created splits is saved as
 `<write_base_str>.<split_type>.summary.k<n_outer_splits>.l<n_inner_splits>.<self.return_frac>.csv`.
@@ -242,8 +329,7 @@ utilizing the class function `from_json` and is named `<write_base_str>.<split_t
 
 **Arguments**:
 
-- `split_type`: Defines the type of splitting, must be either "index", "structureid", "composition",
-"chemsys", "sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups"
+- `split_type`: String specifying the splitting type.
 - `n_inner_splits`: Number of inner splits (for nested k-fold); if set to 0, then `n_inner_splits` is set
 equal to the number of inner test possiblities (i.e., each inner test set holds one possibility out
 for all possible options)
@@ -270,25 +356,27 @@ None
 ### create\_loo\_split
 
 ```python
-def create_loo_split(split_type: str,
-                     loo_label: str,
-                     keep_n_elements_in_train: list | int | None = None,
-                     write_base_str: str = 'mf',
-                     output_dir: str | os.PathLike | None = None,
-                     verbose: bool = False) -> None
+def create_loo_split(
+        self,
+        split_type: str,
+        loo_label: str,
+        keep_n_elements_in_train: list[int] | int | None = None,
+        write_base_str: str = "mf",
+        output_dir: str | os.PathLike | None = None,
+        verbose: bool = False,
+    ) -> None:
 ```
 
-Creates leave-one-out split based on `split_type`, specified `loo_label` and `keep_n_elements_in_train`.
-The splits are saved in `output_dir` as csv files named
-`<write_base_str>.<split_type>.loo.<loo_label>.<train/test>.csv`. Additionally, a summary of the created split
-is saved as `<write_base_str>.<split_type>.summary.loo.<loo_label>.<self.return_frac>.csv`.
+Create leave-one-out split based on `split_type`, specified `loo_label` and `keep_n_elements_in_train`.
+
+The splits are saved in `output_dir` as csv files named `<write_base_str>.<split_type>.loo.<loo_label>.<train/test>.csv`. 
+Additionally, a summary of the created split is saved as `<write_base_str>.<split_type>.summary.loo.<loo_label>.<self.return_frac>.csv`.
 Lastly, a JSON file is saved that stores all relevant class and function variables to recreate the splits
 utilizing the class function `from_json` and is named `<write_base_str>.<split_type>.loo.<loo_label>.json`.
 
 **Arguments**:
 
-- `split_type`: Defines the type of splitting, must be either "structureid", "composition", "chemsys",
-"sgnum", "pointgroup", "crystalsys", "elements", "periodictablerows", or "periodictablegroups".
+- `split_type`: String specifying the splitting type.
 - `loo_label`: Label specifying which single option is to be left out (i.e., constitute the test set).
 This label must be a valid option for the specified `split_type`.
 - `keep_n_elements_in_train`: List of number of elements for which the corresponding materials are kept

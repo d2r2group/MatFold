@@ -1,0 +1,47 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  MatFold: Cross-validation Protocols for Materials Science Data 
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file and/or cite the publication.
+type: software
+authors:
+  - given-names: Peter
+    family-names: Schindler
+    email: p.schindler@northeastern.edu
+    affiliation: Northeastern University
+    orcid: 'https://orcid.org/0000-0002-1319-6570'
+  - given-names: Matthew
+    name-particle: D.
+    family-names: Witman
+    orcid: 'https://orcid.org/0000-0001-6263-5114'
+    email: mwitman@sandia.gov
+    affiliation: Sandia National Laboratories
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.13147391
+    description: Zenodo Record
+  - type: doi
+    value: 10.26434/chemrxiv-2024-bmw1n
+    description: Preprint
+  - type: doi
+    value: 10.1039/D4DD00250D
+    description: Peer-reviewed Publication
+repository-code: 'https://github.com/d2r2group/MatFold/'
+abstract: >-
+  This is a Python package for gaining systematic insights
+  into materials discovery models' performance through
+  standardized, reproducible, and featurization-agnostic
+  chemical and structural cross-validation protocols.
+keywords:
+  - machine learning
+  - materials science
+  - cross-validation
+  - generalization error
+license: MIT
+commit: 897768f1795b83ce0cce72937027949b2959d3fd
+version: v1.2.3
+date-released: '2024-11-26'
