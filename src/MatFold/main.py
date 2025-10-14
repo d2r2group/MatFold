@@ -621,7 +621,8 @@ class MatFold:
             stats = self.split_statistics(split_type)
             average_fraction = sum([stats[sp] for sp in split_possibilities]) / len(split_possibilities)
             outliers = []
-            print(f"{average_fraction=}", flush=True)
+            if verbose:
+                print(f"{average_fraction=}", flush=True)
             # Split possibilities that have a larger fraction than the average (considering `fraction_tolerance`) are considered "outliers" 
             # to determine whether to split naively (randomly, assuming every split label contributes equally to the test/training sets) or not. 
             # The outliers are added to the training set by default.
