@@ -466,6 +466,7 @@ class MatFold:
         if np.isclose(valf, 0.0):
             _check_split_dfs(self.df, [trainval_df, test_df], verbose=verbose)
             train_df = trainval_df.copy()
+            train_labels = trainval_labels.copy()
             val_df = None
             naive_random_split_train_val = None
             val_labels = []

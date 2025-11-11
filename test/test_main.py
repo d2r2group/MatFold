@@ -150,6 +150,24 @@ def test_train_validation_test_splits(load_test_data):
         output_dir=OUTPUT_DIR,
     )
 
+def test_train_validation_test_splits_noval(load_test_data):
+    """Test the create_train_validation_test_splits method by creating splits with specific parameters."""
+    cifs, data = load_test_data
+    mfc = MatFold(data, cifs, return_frac=1.0, always_include_n_elements=None)
+    tdf, vdf, tdf = mfc.create_train_validation_test_splits(
+        "structureid",
+        "crystalsys",
+        0.8,
+        0.0,
+        0.2,
+        fraction_tolerance=0.05,
+        keep_n_elements_in_train=[],
+        default_train=[],
+        default_validation=[],
+        default_test=["tetragonal"],
+        output_dir=OUTPUT_DIR,
+    )
+
 
 def test_create_nested_splits(load_test_data):
     """Test the create_nested_splits method by creating splits with specific parameters."""
