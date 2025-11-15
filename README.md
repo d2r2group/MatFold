@@ -37,6 +37,10 @@ Alternatively, this repository can be downloaded/cloned and then installed by ru
 
 ## Usage
 
+### ![Colab Banner](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252) Tutorial on Google Colab
+
+An example of how `MatFold` can be used to study out-of-distribution generalization is demonstrated on a `MatMiner` dataset: [Link to Google Colab Notebook](https://colab.research.google.com/drive/1OGGyq7AFgb57zEPbMpGsm5AGGmFbpmbX).
+
 ### Data Preparation and Loading
 
 To utilize `MatFold`, the user has to provide their materials data as a Pandas dataframe and 
